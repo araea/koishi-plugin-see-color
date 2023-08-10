@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-see-color",
-  "description": "",
-  "version": "0.0.1",
+  "description": "找色块、拼眼力小游戏，发现不同色块，挑战观察力，又名《给我点颜色看看》。",
+  "version": "0.0.5",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -9,13 +9,29 @@
     "dist"
   ],
   "license": "MIT",
+  "author": "Nawyjx <3373167460@qq.com>",
+  "homepage": "https://www.npmjs.com/package/koishi-plugin-see-color?activeTab=readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/araea/koishi-plugin-see-color.git"
+  },
   "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "seeColor",
+    "color",
+    "game",
+    "给我点颜色看看",
+    "猜色块",
+    "找色块",
+    "拼眼力"
   ],
   "peerDependencies": {
-    "koishi": "^4.14.1"
+    "koishi": "^4.14.0"
+  },
+  "dependencies": {
+    "jimp": "^0.22.10"
   }
 }
