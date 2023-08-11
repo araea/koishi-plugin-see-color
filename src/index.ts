@@ -258,35 +258,56 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       return color;
     };
 
-    const adjustColor = (color, percentage, mode) => {
-      const factor = 1 + Math.random() * (percentage / 100); // 随机因子
+const adjustColor = (color, percentage, mode) => {
+  // 检查输入参数是否合法
+  if (
+    typeof color !== 'string' ||
+    !/^#[0-9a-fA-F]{6}$/.test(color) ||
+    typeof percentage !== 'number' ||
+    percentage <= 0 ||
+    (mode !== '随机' && mode !== '变浅变深')
+  ) {
+    return '无效的输入';
+  }
 
-      const rgb = color
-        .slice(1)
-        .match(/.{2}/g)
-        .map((hex) => parseInt(hex, 16));
+  const factor = 1 + Math.random() * (percentage / 100); // 随机因子
 
-      const adjusted = rgb.map((value) => {
-        if (mode === '随机') {
-          return Math.round(value * factor); // 直接随机变化
+  const rgb = color
+    .slice(1)
+    .match(/.{2}/g)
+    .map((hex) => parseInt(hex, 16));
+
+  let adjusted; // 调整后的颜色值
+  let newColor; // 调整后的颜色字符串
+
+  do {
+    adjusted = rgb.map((value) => {
+      if (mode === '随机') {
+        return Math.round(value * factor); // 直接随机变化
+      } else {
+        const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
+
+        if (isLighten) {
+          return Math.min(255, Math.round(value * factor));
         } else {
-          const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
-
-          if (isLighten) {
-            return Math.min(255, Math.round(value * factor));
-          } else {
-            return Math.max(0, Math.round(value / factor));
-          }
+          return Math.max(0, Math.round(value / factor));
         }
-      });
+      }
+    });
 
-      return (
-        '#' +
-        adjusted
-          .map((value) => value.toString(16).padStart(2, '0'))
-          .join('')
-      );
-    };
+    // 处理溢出情况
+    adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+
+    newColor =
+      '#' +
+      adjusted
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join('');
+  } while (newColor === color); // 循环直到生成不同的颜色
+
+  return newColor;
+};
+
 
     const randomInt = (min, max) => {
       return Math.floor(Math.random() * (max - min + 1)) + min;
