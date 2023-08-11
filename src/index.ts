@@ -25,27 +25,38 @@ export const usage = `## ⚙️ 配置
 - \`seeColor.rank\`: 查看玩家的排名，根据他们的分数。`
 
 export interface Config {
+  isCompressPicture: boolean
+  pictureQuality: number
   initialLevel: number
   blockSize: number
   diffPercentage: number
   diffMode: string
-  isCompressPicture: boolean
   style: string
 
 }
-
-export const Config: Schema<Config> = Schema.object({
-  initialLevel: Schema.number().default(2).description('游戏的初始等级'),
-  blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）'),
-  diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比'),
-  diffMode: Schema
-    .union(['变浅', '变深', '随机']).default('随机')
-    .role('radio').description('色块差异模式'),
-  isCompressPicture: Schema.boolean().default(false).description('是否压缩图片'),
-  style: Schema
-    .union(['1', '2', '3', '4', '随机']).default('1')
-    .role('radio').description('色块样式'),
-})
+export const Config: Schema<Config> = Schema.intersect([
+  Schema.object({
+    initialLevel: Schema.number().default(2).description('游戏的初始等级'),
+    blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）'),
+    diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比'),
+    diffMode: Schema
+      .union(['变浅', '变深', '随机']).default('随机')
+      .role('radio').description('色块差异模式'),
+    style: Schema
+      .union(['1', '2', '3', '4', '随机']).default('1')
+      .role('radio').description('色块样式'),
+  }).description('基础配置'),
+  Schema.object({
+    isCompressPicture: Schema.boolean().default(false).description('是否压缩图片(不建议)'),
+  }).description('图片配置'),
+  Schema.union([
+    Schema.object({
+      isCompressPicture: Schema.const(true).required(),
+      pictureQuality: Schema.number().min(1).max(100).default(80).description('压缩后图片的质量(1-100)'),
+    }),
+    Schema.object({}),
+  ]),
+]) as Schema<Config>
 
 // TypeScript 用户需要进行类型合并
 declare module 'koishi' {
@@ -247,7 +258,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
   // 核心功能实现
   const generatePictureBuffer = async (n, ctx, guildId) => {
-    const { blockSize, diffPercentage, diffMode, isCompressPicture, style } = config;
+    const { blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality } = config;
     const pictureSize = blockSize * n;
 
     const randomColor = () => {
@@ -258,55 +269,55 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       return color;
     };
 
-const adjustColor = (color, percentage, mode) => {
-  // 检查输入参数是否合法
-  if (
-    typeof color !== 'string' ||
-    !/^#[0-9a-fA-F]{6}$/.test(color) ||
-    typeof percentage !== 'number' ||
-    percentage <= 0 ||
-    (mode !== '随机' && mode !== '变浅变深')
-  ) {
-    return '无效的输入';
-  }
-
-  const factor = 1 + Math.random() * (percentage / 100); // 随机因子
-
-  const rgb = color
-    .slice(1)
-    .match(/.{2}/g)
-    .map((hex) => parseInt(hex, 16));
-
-  let adjusted; // 调整后的颜色值
-  let newColor; // 调整后的颜色字符串
-
-  do {
-    adjusted = rgb.map((value) => {
-      if (mode === '随机') {
-        return Math.round(value * factor); // 直接随机变化
-      } else {
-        const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
-
-        if (isLighten) {
-          return Math.min(255, Math.round(value * factor));
-        } else {
-          return Math.max(0, Math.round(value / factor));
-        }
+    const adjustColor = (color, percentage, mode) => {
+      // 检查输入参数是否合法
+      if (
+        typeof color !== 'string' ||
+        !/^#[0-9a-fA-F]{6}$/.test(color) ||
+        typeof percentage !== 'number' ||
+        percentage <= 0 ||
+        (mode !== '随机' && mode !== '变浅变深')
+      ) {
+        return '无效的输入';
       }
-    });
 
-    // 处理溢出情况
-    adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+      const factor = 1 + Math.random() * (percentage / 100); // 随机因子
 
-    newColor =
-      '#' +
-      adjusted
-        .map((value) => value.toString(16).padStart(2, '0'))
-        .join('');
-  } while (newColor === color); // 循环直到生成不同的颜色
+      const rgb = color
+        .slice(1)
+        .match(/.{2}/g)
+        .map((hex) => parseInt(hex, 16));
 
-  return newColor;
-};
+      let adjusted; // 调整后的颜色值
+      let newColor; // 调整后的颜色字符串
+
+      do {
+        adjusted = rgb.map((value) => {
+          if (mode === '随机') {
+            return Math.round(value * factor); // 直接随机变化
+          } else {
+            const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
+
+            if (isLighten) {
+              return Math.min(255, Math.round(value * factor));
+            } else {
+              return Math.max(0, Math.round(value / factor));
+            }
+          }
+        });
+
+        // 处理溢出情况
+        adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+
+        newColor =
+          '#' +
+          adjusted
+            .map((value) => value.toString(16).padStart(2, '0'))
+            .join('');
+      } while (newColor === color); // 循环直到生成不同的颜色
+
+      return newColor;
+    };
 
 
     const randomInt = (min, max) => {
@@ -503,7 +514,7 @@ const adjustColor = (color, percentage, mode) => {
 
     let buffer: Buffer;
     if (isCompressPicture) {
-      buffer = await page.screenshot({ type: 'jpeg', quality: 80 });
+      buffer = await page.screenshot({ type: 'jpeg', quality: pictureQuality });
     } else {
       buffer = await page.screenshot({ type: 'png' });
     }
