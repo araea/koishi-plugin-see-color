@@ -144,7 +144,7 @@ function registerAllKoishiCommands(ctx: Context, config: Config) {
       // 获取游戏信息
       const gameInfo = await getGameInfo(ctx, session.guildId)
       if (!gameInfo.isStarted) {
-        return msg.isNotStarted
+        return
       }
       if (number === gameInfo.block) {
         // 更新排行榜
