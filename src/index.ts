@@ -28,12 +28,23 @@ export interface Config {
   initialLevel: number
   blockSize: number
   diffPercentage: number
+  diffMode: string
+  isCompressPicture: boolean
+  style: string
+
 }
 
 export const Config: Schema<Config> = Schema.object({
   initialLevel: Schema.number().default(2).description('游戏的初始等级'),
   blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）'),
   diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比'),
+  diffMode: Schema
+    .union(['变浅', '变深', '随机']).default('随机')
+    .role('radio').description('色块差异模式'),
+  isCompressPicture: Schema.boolean().default(false).description('是否压缩图片'),
+  style: Schema
+    .union(['1', '2', '3', '4', '随机']).default('1')
+    .role('radio').description('色块样式'),
 })
 
 // TypeScript 用户需要进行类型合并
@@ -235,32 +246,55 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   }
 
   // 核心功能实现
-
-  function randomInt(min, max) {
-    return (Math.random() * (max - min + 1) + min) | 0;
-  }
-
-  function randomColor() {
-    return '#' + ((Math.random() * 0xFFFFFF) | 0).toString(16).padStart(6, '0');
-  }
-
-  function lightenColor(color, percentage) {
-    let colorInt = parseInt(color.slice(1), 16);
-    for (let i = 0; i < 3; i++) {
-      let channel = (colorInt >> (8 * i)) & 0xFF;
-      channel = Math.min(255, Math.round(channel + ((255 - channel) * percentage / 200)));
-      colorInt = (colorInt & ~(0xFF << (8 * i))) | (channel << (8 * i));
-    }
-    return '#' + colorInt.toString(16).padStart(6, '0');
-  }
-
-  async function generatePictureBuffer(n, ctx, guildId) {
-    const blockSize = config.blockSize;
+  const generatePictureBuffer = async (n, ctx, guildId) => {
+    const { blockSize, diffPercentage, diffMode, isCompressPicture, style } = config;
     const pictureSize = blockSize * n;
+
+    const randomColor = () => {
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += Math.floor(Math.random() * 16).toString(16);
+      }
+      return color;
+    };
+
+    const adjustColor = (color, percentage, mode) => {
+      const factor = 1 + Math.random() * (percentage / 100); // 随机因子
+
+      const rgb = color
+        .slice(1)
+        .match(/.{2}/g)
+        .map((hex) => parseInt(hex, 16));
+
+      const adjusted = rgb.map((value) => {
+        if (mode === '随机') {
+          return Math.round(value * factor); // 直接随机变化
+        } else {
+          const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
+
+          if (isLighten) {
+            return Math.min(255, Math.round(value * factor));
+          } else {
+            return Math.max(0, Math.round(value / factor));
+          }
+        }
+      });
+
+      return (
+        '#' +
+        adjusted
+          .map((value) => value.toString(16).padStart(2, '0'))
+          .join('')
+      );
+    };
+
+    const randomInt = (min, max) => {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    };
 
     const baseColor = randomColor();
 
-    const diffColor = lightenColor(baseColor, config.diffPercentage);
+    const diffColor = adjustColor(baseColor, diffPercentage, diffMode);
 
     const diffRow = randomInt(0, n - 1);
     const diffCol = randomInt(0, n - 1);
@@ -281,49 +315,177 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       deviceScaleFactor: 1,
     });
 
-    let html = `<style>
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-  
-      .container {
-        display: grid;
-        grid-template-columns: repeat(${n}, ${blockSize}px);
-        grid-template-rows: repeat(${n}, ${blockSize}px);
-        font-family: sans-serif;
-        font-size: ${blockSize / 2}px;
-        color: black;
-        text-align: center;
-        line-height: ${blockSize}px;
-      }
-  
-      .block {
-        background-color: ${baseColor};
-        border: solid white ${blockSize / 10}px;
-      }
-  
-      .diff {
-        background-color: ${diffColor};
-      }
-      </style>
-      <div class="container">`;
+    let html: any;
 
-    for (let row = 0; row < n; row++) {
-      for (let col = 0; col < n; col++) {
-        const seqNum = row * n + col + 1;
-        const className =
-          row === diffRow && col === diffCol ? 'block diff' : 'block';
-        html += `<div class="${className}">${seqNum}</div>`;
-      }
+    let styleTemp = style
+    // 判断style是否为'随机'
+    if (styleTemp === '随机') {
+
+      // 生成随机索引 
+      const randomIndex = Math.floor(Math.random() * 4);
+
+      // 映射样式字符串
+      styleTemp = ['1', '2', '3', '4'][randomIndex];
+
     }
+
+    switch (styleTemp) {
+      case '1':
+        html = `<style>
+    * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    }
+    
+    .container {
+    display: grid;
+    grid-template-columns: repeat(${n}, ${blockSize}px);
+    grid-template-rows: repeat(${n}, ${blockSize}px);
+    font-family: sans-serif;
+    font-size: ${blockSize / 2}px;
+    color: black;
+    text-align: center;
+    line-height: ${blockSize}px;
+    }
+    
+    .block {
+    background-color: ${baseColor};
+    border: solid white ${blockSize / 10}px;
+    }
+    
+    .diff {
+    background-color: ${diffColor};
+    }
+    </style>
+    <div class="container">`;
+        break;
+      case '2':
+        html = `<style>
+  * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  }
+  
+  .container {
+  display: grid;
+  grid-template-columns: repeat(${n}, ${blockSize}px);
+  grid-template-rows: repeat(${n}, ${blockSize}px);
+  font-family: 'Roboto', sans-serif; /* Use a different font */
+  font-size: ${blockSize / 2}px;
+  color: black;
+  text-align: center;
+  line-height: ${blockSize}px;
+  }
+  
+  .block {
+  background-color: ${baseColor};
+  border-radius: ${blockSize / 4}px; /* Use a rounded border */
+  box-shadow: inset -${blockSize / 10}px -${blockSize / 10}px ${blockSize / 5}px rgba(0,0,0,0.2); /* Use a shadow effect */
+  background-image: linear-gradient(to bottom right, ${baseColor}, ${adjustColor(baseColor, 20, diffMode)}); /* Use a gradient background */
+  }
+  
+  .diff {
+  background-color: ${diffColor};
+  border-radius: ${blockSize / 4}px; /* Use a rounded border */
+  box-shadow: inset -${blockSize / 10}px -${blockSize / 10}px ${blockSize / 5}px rgba(0,0,0,0.2); /* Use a shadow effect */
+  background-image: linear-gradient(to bottom right, ${diffColor}, ${adjustColor(diffColor, 20, diffMode)}); /* Use a gradient background */
+  }
+  </style>
+  <div class="container">`;
+        break;
+      case '3':
+        html = `<style>
+        .container {
+          display: grid;  
+          grid-template-columns: repeat(${n}, ${blockSize}px);
+          grid-template-rows: repeat(${n}, ${blockSize}px);
+          
+          background-color: #333;
+          color: #fff;
+          
+          font-family: Arial;
+          font-size: ${blockSize * 0.8}px;
+          
+          perspective: 1000px;
+        }
+        
+        .block {
+          position: relative;
+          transform: rotateX(60deg) rotateZ(45deg);
+          
+          background-color: ${baseColor}; /* Use a fixed color for the base blocks */
+          box-shadow: ${blockSize / 10}px ${blockSize / 10}px 10px rgba(0,0,0,0.8);
+          
+          transition: transform 0.3s;
+        }
+        
+        .block:active {
+          transform: scale(0.95);
+        }
+        
+        .diff {
+          background-color: ${diffColor}; /* Use a different color for the diff block */
+        }
+        </style>
+        
+        <div class="container">
+        
+      `;
+        break;
+      case '4':
+        html = `<style>
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+      
+        .container {
+          display: grid;
+          grid-template-columns: repeat(${n}, ${blockSize}px);
+          grid-template-rows: repeat(${n}, ${blockSize}px);
+          font-family: 'Comic Sans MS', cursive; /* Use a playful font */
+          font-size: ${blockSize / 2}px;
+          color: white;
+          text-align: center;
+          line-height: ${blockSize}px;
+        }
+      
+        .block {
+          background-color: ${baseColor};
+          border: none; /* Remove the border */
+        }
+      
+        .diff {
+          background-color: ${diffColor};
+        }
+      </style>
+      <div class="container">
+      `;
+
+        break;
+      default:
+        break;
+    }
+    html += Array.from({ length: n * n }, (_, i) => {
+      const seqNum = i + 1;
+      const className =
+        i === diffRow * n + diffCol ? 'block diff' : 'block';
+      return `<div class="${className}">${seqNum}</div>`;
+    }).join('');
 
     html += '</div>';
 
     await page.setContent(html);
 
-    const buffer = await page.screenshot({ type: 'png' });
+    let buffer: Buffer;
+    if (isCompressPicture) {
+      buffer = await page.screenshot({ type: 'jpeg', quality: 80 });
+    } else {
+      buffer = await page.screenshot({ type: 'png' });
+    }
 
     await browser.close();
 
