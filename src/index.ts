@@ -12,7 +12,7 @@ export const usage = `## ⚙️ 配置
 新增配置项：
 
 - \`diffMode\`: 色块差异模式。可选值为 "变浅"、"变深"、"随机"。默认值为 "随机"。
-- \`style\`: 色块样式。可选值为 "1"、"2"、"3"、"4"、"随机"。默认值为 "1"。
+- \`style\`: 色块样式。可选值为 "1"、"2"、"3"、"随机"。默认值为 "1"。
 
 图片配置：
 
@@ -56,7 +56,7 @@ export const Config: Schema<Config> = Schema.intersect([
       .union(['变浅', '变深', '随机']).default('随机')
       .role('radio').description('色块差异模式'),
     style: Schema
-      .union(['1', '2', '3', '4', '随机']).default('1')
+      .union(['1', '2', '3', '随机']).default('1')
       .role('radio').description('色块样式'),
   }).description('基础配置'),
   Schema.object({
@@ -169,8 +169,8 @@ function registerAllKoishiCommands(ctx: Context, config: Config) {
       // 更新游戏状态
       updateGameState(ctx, session.guildId, true, initialLevel)
     })
-    
-  // // test
+
+  // test
   // ctx.command('seeColor.test', '测试')
   //   .action(async ({ session }) => {
   //     // 开始游戏
@@ -278,6 +278,24 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     await ctx.model.set(GAME_ID, { guildId: guildId }, { isStarted: isStarted, level: level })
   }
 
+  let browser;
+  async function getBrowserInstance() {
+    if (!browser) {
+      browser = await puppeteer.launch({
+        executablePath: executablePath,
+        headless: "new",
+        args: ['--no-sandbox', '--disable-gpu'],
+      });
+    }
+    return browser;
+  }
+
+  // 关闭插件时消除插件的副作用
+  ctx.on('dispose', async () => {
+    const browserInstance = await getBrowserInstance();
+    await browserInstance.close
+  })
+
   // 核心功能实现
   const generatePictureBuffer = async (n, ctx, guildId) => {
     const { blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality } = config;
@@ -355,13 +373,9 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
     await ctx.model.set(GAME_ID, { guildId: guildId }, { block: diffRow * n + diffCol + 1 });
 
-    const browser = await puppeteer.launch({
-      executablePath: executablePath,
-      headless: "new",
-      args: ['--no-sandbox', '--disable-gpu'],
-    });
+    const browserInstance = await getBrowserInstance();
 
-    const page = await browser.newPage();
+    const page = await browserInstance.newPage();
 
     await page.setViewport({
       width: pictureSize,
@@ -379,40 +393,42 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       const randomIndex = Math.floor(Math.random() * 4);
 
       // 映射样式字符串
-      styleTemp = ['1', '2', '3', '4'][randomIndex];
+      styleTemp = ['1', '2', '3'][randomIndex];
 
     }
 
     switch (styleTemp) {
       case '1':
         html = `<style>
-    * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    }
-    
-    .container {
-    display: grid;
-    grid-template-columns: repeat(${n}, ${blockSize}px);
-    grid-template-rows: repeat(${n}, ${blockSize}px);
-    font-family: sans-serif;
-    font-size: ${blockSize / 2}px;
-    color: black;
-    text-align: center;
-    line-height: ${blockSize}px;
-    }
-    
-    .block {
-    background-color: ${baseColor};
-    border: solid white ${blockSize / 10}px;
-    }
-    
-    .diff {
-    background-color: ${diffColor};
-    }
-    </style>
-    <div class="container">`;
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+      
+          .container {
+            display: grid;
+            grid-template-columns: repeat(${n}, ${blockSize}px);
+            grid-template-rows: repeat(${n}, ${blockSize}px);
+            font-family: sans-serif;
+            font-size: ${blockSize / 2}px;
+            color: black;
+            text-align: center;
+            line-height: ${blockSize}px;
+          }
+      
+          .block {
+            background-color: ${baseColor};
+            border: ${blockSize / 10}px solid white;
+            box-sizing: content-box; /* Add this line to exclude the border from the block's size */
+          }
+      
+          .diff {
+            background-color: ${diffColor};
+          }
+        </style>
+      
+        <div class="container">`;
         break;
       case '2':
         html = `<style>
@@ -451,92 +467,51 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
         break;
       case '3':
         html = `<style>
-        .container {
-          display: grid;  
-          grid-template-columns: repeat(${n}, ${blockSize}px);
-          grid-template-rows: repeat(${n}, ${blockSize}px);
-          
-          background-color: #333;
-          color: #fff;
-          
-          font-family: Arial;
-          font-size: ${blockSize * 0.8}px;
-          
-          perspective: 1000px;
-        }
+            * {
+              box-sizing: border-box;
+              margin: 0;
+              padding: 0;
+            }
         
-        .block {
-          position: relative;
-          transform: rotateX(60deg) rotateZ(45deg);
-          
-          background-color: ${baseColor}; /* Use a fixed color for the base blocks */
-          box-shadow: ${blockSize / 10}px ${blockSize / 10}px 10px rgba(0,0,0,0.8);
-          
-          transition: transform 0.3s;
-        }
+            .container {
+              display: grid;
+              grid-template-columns: repeat(${n}, ${blockSize}px);
+              grid-template-rows: repeat(${n}, ${blockSize}px);
+              font-family: 'Comic Sans MS', cursive; /* Use a playful font */
+              font-size: ${blockSize / 2}px;
+              color: white;
+              text-align: center;
+              line-height: ${blockSize}px;
+            }
         
-        .block:active {
-          transform: scale(0.95);
-        }
+            .block {
+              background-color: ${baseColor};
+              border: none; /* Remove the border */
+              overflow: hidden; /* Hide any overflowing content */
+            }
         
-        .diff {
-          background-color: ${diffColor}; /* Use a different color for the diff block */
-        }
-        </style>
+            .diff {
+              background-color: ${diffColor};
+            }
+          </style>
         
-        <div class="container">
-        
-      `;
-        break;
-      case '4':
-        html = `<style>
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-      
-        .container {
-          display: grid;
-          grid-template-columns: repeat(${n}, ${blockSize}px);
-          grid-template-rows: repeat(${n}, ${blockSize}px);
-          font-family: 'Comic Sans MS', cursive; /* Use a playful font */
-          font-size: ${blockSize / 2}px;
-          color: white;
-          text-align: center;
-          line-height: ${blockSize}px;
-        }
-      
-        .block {
-          background-color: ${baseColor};
-          border: none; /* Remove the border */
-        }
-      
-        .diff {
-          background-color: ${diffColor};
-        }
-      </style>
-      <div class="container">
-      `;
-
+          <div class="container">
+          `;
         break;
       default:
         break;
     }
-    // Add CSS to shrink text when needed
     html += `<style>
   .shrink {
     font-size: ${blockSize / 3}px; 
   }
 </style>`;
 
-    // Wrap each serial number in a span to control sizing
     html += Array.from({ length: n * n }, (_, i) => {
       const seqNum = i + 1;
       const className =
         i === diffRow * n + diffCol ? 'block diff' : 'block';
 
-      // Check if number is 3 or 4 digits, if so add .shrink class
       const numDigits = seqNum.toString().length;
       const shrinkClass = numDigits > 2 ? 'shrink' : '';
 
@@ -553,9 +528,12 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     } else {
       buffer = await page.screenshot({ type: 'png' });
     }
-
-    await browser.close();
-
+    // 关闭插件时消除插件的副作用
+    ctx.on('dispose', async () => {
+      await page.close
+    })
     return buffer;
   }
+
+
 }
