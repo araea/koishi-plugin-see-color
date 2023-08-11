@@ -1,6 +1,6 @@
 import { Context, Schema, h } from 'koishi'
-// 导入 jimp 库以创建和操作图像
-import Jimp from 'jimp';
+import find from 'puppeteer-finder'
+import puppeteer from "puppeteer-core";
 
 export const name = 'see-color'
 export const usage = `## ⚙️ 配置
@@ -58,6 +58,9 @@ export interface SeeColorRank {
   userName: string
   score: number
 }
+
+// puppeteer-finder模块可以查找本机安装的Chrome / Firefox / Edge浏览器
+const executablePath = find();
 
 export function apply(ctx: Context, config: Config) {
   // 过滤上下文，仅群聊可用
@@ -233,84 +236,97 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
   // 核心功能实现
 
-  // 定义一个函数以生成介于最小和最大(含)之间的随机整数
-  function randomInt(min: number, max: number): number {
-    // 使用位运算符来代替 Math.floor，因为它更快
+  function randomInt(min, max) {
     return (Math.random() * (max - min + 1) + min) | 0;
   }
 
-  // 定义一个函数以生成十六进制格式的随机颜色
-  function randomColor(): string {
-    // 使用 toString(16) 来直接生成十六进制字符串，而不是使用数组和循环
-    // 使用 padStart(6, '0') 来确保字符串长度为6
+  function randomColor() {
     return '#' + ((Math.random() * 0xFFFFFF) | 0).toString(16).padStart(6, '0');
   }
 
-  // 定义一个按给定百分比使颜色变亮的函数
-  function lightenColor(color: string, percentage: number): string {
-    // 将颜色字符串转换为整数
+  function lightenColor(color, percentage) {
     let colorInt = parseInt(color.slice(1), 16);
-    // 循环三次以处理每个 RGB 通道
     for (let i = 0; i < 3; i++) {
-      // 通过移位和掩蔽提取当前通道值
       let channel = (colorInt >> (8 * i)) & 0xFF;
-      // 按百分比使通道值变亮
       channel = Math.min(255, Math.round(channel + ((255 - channel) * percentage / 200)));
-      // 通过遮罩和移位来更新颜色整数
       colorInt = (colorInt & ~(0xFF << (8 * i))) | (channel << (8 * i));
     }
-    // 将颜色整数转换回带有填充零的字符串
     return '#' + colorInt.toString(16).padStart(6, '0');
   }
 
-  // 定义一个函数来为游戏生成图片缓冲区
-  async function generatePictureBuffer(n: number, ctx: Context, guildId: string): Promise<Buffer> {
-    // 定义图片大小和字体大小的一些常量
-    const blockSize = config.blockSize; // 每个颜色块的大小(以像素为单位)
-    const pictureSize = blockSize * n; // 图片的大小(以像素为单位)
+  async function generatePictureBuffer(n, ctx, guildId) {
+    const blockSize = config.blockSize;
+    const pictureSize = blockSize * n;
 
-    // 为颜色块生成随机颜色
     const baseColor = randomColor();
 
-    // 为不同的颜色块生成较浅的颜色
     const diffColor = lightenColor(baseColor, config.diffPercentage);
 
-    // 生成较浅的颜色为不同颜色块生成不同颜色块的随机位置
     const diffRow = randomInt(0, n - 1);
     const diffCol = randomInt(0, n - 1);
 
-    await ctx.model.set(GAME_ID, { guildId: guildId }, { block: diffRow * n + diffCol + 1 })
+    await ctx.model.set(GAME_ID, { guildId: guildId }, { block: diffRow * n + diffCol + 1 });
 
-    // 创建具有图片大小和基色的新图像
-    const image = new Jimp(pictureSize, pictureSize, baseColor);
+    const browser = await puppeteer.launch({
+      executablePath: executablePath,
+      headless: "new",
+      args: ['--no-sandbox', '--disable-gpu'],
+    });
 
-    // 加载用于书写序列号的字体
-    const font = Jimp.loadFont(Jimp.FONT_SANS_16_BLACK);
+    const page = await browser.newPage();
 
-    // 循环通过颜色块的每一行和每一列
+    await page.setViewport({
+      width: pictureSize,
+      height: pictureSize,
+      deviceScaleFactor: 1,
+    });
+
+    let html = `<style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+  
+      .container {
+        display: grid;
+        grid-template-columns: repeat(${n}, ${blockSize}px);
+        grid-template-rows: repeat(${n}, ${blockSize}px);
+        font-family: sans-serif;
+        font-size: ${blockSize / 2}px;
+        color: black;
+        text-align: center;
+        line-height: ${blockSize}px;
+      }
+  
+      .block {
+        background-color: ${baseColor};
+        border: solid white ${blockSize / 10}px;
+      }
+  
+      .diff {
+        background-color: ${diffColor};
+      }
+      </style>
+      <div class="container">`;
+
     for (let row = 0; row < n; row++) {
       for (let col = 0; col < n; col++) {
-        // 计算当前颜色块的序列号
         const seqNum = row * n + col + 1;
-        // 计算当前颜色块的x和y坐标
-        const x = col * blockSize;
-        const y = row * blockSize;
-        // 检查当前颜色块是否为不同的颜色块
-        if (row === diffRow && col === diffCol) {
-          // 用较浅的颜色在基色上绘制一个矩形
-          image.scan(x, y, blockSize, blockSize, (x, y, idx) => {
-            image.bitmap.data[idx] = parseInt(diffColor.slice(1, 3), 16);
-            image.bitmap.data[idx + 1] = parseInt(diffColor.slice(3, 5), 16);
-            image.bitmap.data[idx + 2] = parseInt(diffColor.slice(5), 16);
-          });
-        }
-        // 用字体将序列号写在当前颜色块的中心
-        // 使用 print 的第四个参数来指定文本的宽度和高度，以避免文本超出边界
-        image.print(await font, x, y, { text: seqNum.toString(), alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER, alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE }, blockSize, blockSize);
+        const className =
+          row === diffRow && col === diffCol ? 'block diff' : 'block';
+        html += `<div class="${className}">${seqNum}</div>`;
       }
-
     }
-    // 以PNG格式返回图片的缓冲区
-    return await image.getBufferAsync(Jimp.MIME_PNG);
+
+    html += '</div>';
+
+    await page.setContent(html);
+
+    const buffer = await page.screenshot({ type: 'png' });
+
+    await browser.close();
+
+    return buffer;
   }
 }
