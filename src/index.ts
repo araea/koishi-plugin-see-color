@@ -169,6 +169,13 @@ function registerAllKoishiCommands(ctx: Context, config: Config) {
       // 更新游戏状态
       updateGameState(ctx, session.guildId, true, initialLevel)
     })
+  // test
+  ctx.command('seeColor.test', '测试')
+    .action(async ({ session }) => {
+      // 开始游戏
+      const buffer = await generatePictureBuffer(60, ctx, session.guildId)
+      await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
+    })
   // guess
   ctx.command('seeColor.guess <number:number>', '猜色块').alias('块')
     .action(async ({ session }, number) => {
@@ -514,14 +521,27 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       default:
         break;
     }
+    // Add CSS to shrink text when needed
+    html += `<style>
+  .shrink {
+    font-size: ${blockSize / 3}px; 
+  }
+</style>`;
+
+    // Wrap each serial number in a span to control sizing
     html += Array.from({ length: n * n }, (_, i) => {
       const seqNum = i + 1;
       const className =
         i === diffRow * n + diffCol ? 'block diff' : 'block';
-      return `<div class="${className}">${seqNum}</div>`;
-    }).join('');
 
-    html += '</div>';
+      // Check if number is 3 or 4 digits, if so add .shrink class
+      const numDigits = seqNum.toString().length;
+      const shrinkClass = numDigits > 2 ? 'shrink' : '';
+
+      return `<div class="${className}">
+    <span class="${shrinkClass}">${seqNum}</span>
+  </div>`;
+    }).join('');
 
     await page.setContent(html);
 
