@@ -1,6 +1,6 @@
 import { Context, Schema, h } from 'koishi'
 import find from 'puppeteer-finder'
-import puppeteer from "puppeteer-core";
+import puppeteer, { Browser } from "puppeteer-core";
 
 export const name = 'see-color'
 export const usage = `## ⚙️ 配置
@@ -50,7 +50,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     initialLevel: Schema.number().default(2).description('游戏的初始等级'),
-    blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）'),
+    blockSize: Schema.number().default(100).description('每个颜色方块的大小（像素）'),
     diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比'),
     diffMode: Schema
       .union(['变浅', '变深', '随机']).default('随机')
@@ -278,7 +278,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     await ctx.model.set(GAME_ID, { guildId: guildId }, { isStarted: isStarted, level: level })
   }
 
-  let browser;
+  let browser: Browser;
   async function getBrowserInstance() {
     if (!browser) {
       browser = await puppeteer.launch({
@@ -293,11 +293,11 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   // 关闭插件时消除插件的副作用
   ctx.on('dispose', async () => {
     const browserInstance = await getBrowserInstance();
-    await browserInstance.close
+    await browserInstance.close()
   })
 
   // 核心功能实现
-  const generatePictureBuffer = async (n, ctx, guildId) => {
+  const generatePictureBuffer = async (n: number, ctx: Context, guildId: string) => {
     const { blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality } = config;
     const pictureSize = blockSize * n;
 
@@ -309,7 +309,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       return color;
     };
 
-    const adjustColor = (color, percentage, mode) => {
+    const adjustColor = (color: string, percentage: number, mode: string) => {
       // 检查输入参数是否合法
       if (
         typeof color !== 'string' ||
@@ -328,8 +328,8 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
         .match(/.{2}/g)
         .map((hex) => parseInt(hex, 16));
 
-      let adjusted; // 调整后的颜色值
-      let newColor; // 调整后的颜色字符串
+      let adjusted: any[]; // 调整后的颜色值
+      let newColor: string; // 调整后的颜色字符串
 
       do {
         adjusted = rgb.map((value) => {
@@ -347,12 +347,12 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
         });
 
         // 处理溢出情况
-        adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+        adjusted = adjusted.map((value: number) => Math.min(255, Math.max(0, value)));
 
         newColor =
           '#' +
           adjusted
-            .map((value) => value.toString(16).padStart(2, '0'))
+            .map((value: { toString: (arg0: number) => string; }) => value.toString(16).padStart(2, '0'))
             .join('');
       } while (newColor === color); // 循环直到生成不同的颜色
 
@@ -360,7 +360,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     };
 
 
-    const randomInt = (min, max) => {
+    const randomInt = (min: number, max: number) => {
       return Math.floor(Math.random() * (max - min + 1)) + min;
     };
 
@@ -499,6 +499,37 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
           `;
         break;
       default:
+        html = `<style>
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+    
+        .container {
+          display: grid;
+          grid-template-columns: repeat(${n}, ${blockSize}px);
+          grid-template-rows: repeat(${n}, ${blockSize}px);
+          font-family: 'Comic Sans MS', cursive; /* Use a playful font */
+          font-size: ${blockSize / 2}px;
+          color: white;
+          text-align: center;
+          line-height: ${blockSize}px;
+        }
+    
+        .block {
+          background-color: ${baseColor};
+          border: none; /* Remove the border */
+          overflow: hidden; /* Hide any overflowing content */
+        }
+    
+        .diff {
+          background-color: ${diffColor};
+        }
+      </style>
+    
+      <div class="container">
+      `;
         break;
     }
     html += `<style>
@@ -530,7 +561,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     }
     // 关闭插件时消除插件的副作用
     ctx.on('dispose', async () => {
-      await page.close
+      await page.close()
     })
     return buffer;
   }
