@@ -50,7 +50,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     initialLevel: Schema.number().default(2).description('游戏的初始等级'),
-    blockSize: Schema.number().default(100).description('每个颜色方块的大小（像素）'),
+    blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）'),
     diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比'),
     diffMode: Schema
       .union(['变浅', '变深', '随机']).default('随机')
@@ -171,12 +171,12 @@ function registerAllKoishiCommands(ctx: Context, config: Config) {
     })
 
   // test
-  // ctx.command('seeColor.test', '测试')
-  //   .action(async ({ session }) => {
-  //     // 开始游戏
-  //     const buffer = await generatePictureBuffer(60, ctx, session.guildId)
-  //     await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
-  //   })
+  ctx.command('seeColor.test', '测试')
+    .action(async ({ session }) => {
+      // 开始游戏
+      const buffer = await generatePictureBuffer(60, ctx, session.guildId)
+      await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
+    })
 
   // guess
   ctx.command('seeColor.guess <number:number>', '猜色块').alias('块')
@@ -278,22 +278,35 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     await ctx.model.set(GAME_ID, { guildId: guildId }, { isStarted: isStarted, level: level })
   }
 
-  let browser: Browser;
-  async function getBrowserInstance() {
-    if (!browser) {
-      browser = await puppeteer.launch({
-        executablePath: executablePath,
-        headless: "new",
-        args: ['--no-sandbox', '--disable-gpu'],
-      });
+  // 浏览器管理
+  class BrowserManager {
+    private browser: Browser;
+
+    async getBrowserInstance() {
+      if (!this.browser) {
+        this.browser = await puppeteer.launch({
+          executablePath: executablePath,
+          headless: "new",
+          args: ['--no-sandbox', '--disable-gpu'],
+        });
+      }
+      return this.browser;
     }
-    return browser;
+
+    async closeBrowserInstance() {
+      if (this.browser) {
+        await this.browser.close();
+        this.browser = null;
+      }
+    }
   }
+
+  // 创建 BrowserManager 的实例
+  const browserManager = new BrowserManager();
 
   // 关闭插件时消除插件的副作用
   ctx.on('dispose', async () => {
-    const browserInstance = await getBrowserInstance();
-    await browserInstance.close()
+    await browserManager.closeBrowserInstance();
   })
 
   // 核心功能实现
@@ -302,18 +315,14 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     const pictureSize = blockSize * n;
 
     const randomColor = () => {
-      let color = '#';
-      for (let i = 0; i < 6; i++) {
-        color += Math.floor(Math.random() * 16).toString(16);
-      }
-      return color;
+      return '#' + Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
     };
 
-    const adjustColor = (color: string, percentage: number, mode: string) => {
+    const adjustColor = (color: string | number, percentage: number, mode: string) => {
       // 检查输入参数是否合法
       if (
-        typeof color !== 'string' ||
-        !/^#[0-9a-fA-F]{6}$/.test(color) ||
+        typeof color !== 'string' && typeof color !== 'number' ||
+        !/^#[0-9a-fA-F]{6}$/.test(color as string) ||
         typeof percentage !== 'number' ||
         percentage <= 0 ||
         (mode !== '随机' && mode !== '变浅变深')
@@ -323,116 +332,115 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
       const factor = 1 + Math.random() * (percentage / 100); // 随机因子
 
-      const rgb = color
-        .slice(1)
-        .match(/.{2}/g)
-        .map((hex) => parseInt(hex, 16));
+      let rgb: number;
 
-      let adjusted: any[]; // 调整后的颜色值
-      let newColor: string; // 调整后的颜色字符串
+      if (typeof color === 'string') {
+        rgb = parseInt(color.slice(1), 16); // 将字符串解析为数字
+      } else {
+        rgb = color;
+      }
+
+      let adjusted: number;
+      let newColor: string;
 
       do {
-        adjusted = rgb.map((value) => {
-          if (mode === '随机') {
-            return Math.round(value * factor); // 直接随机变化
+        const r = rgb & 0xff0000; // 提取红色成分
+        const g = rgb & 0x00ff00; // 提取绿色成分
+        const b = rgb & 0x0000ff; // 提取蓝色组件
+
+        let newR: number; // 使用一个数字来存储新的红色组件
+        let newG: number; // 使用一个数字来存储新的绿色组件
+        let newB: number; // 使用一个数字来存储新的蓝色组件
+
+        if (mode === '随机') {
+          newR = Math.round((r >> 16) * factor); // 移动并乘以红色分量
+          newG = Math.round((g >> 8) * factor); // 移动并乘以绿色的部分
+          newB = Math.round(b * factor); // 乘以蓝色分量
+        } else {
+          const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
+
+          if (isLighten) {
+            newR = Math.min(255, Math.round((r >> 16) * factor)); // 移位、相乘和限制红色分量
+            newG = Math.min(255, Math.round((g >> 8) * factor)); // 移位、相乘和限制绿色分量
+            newB = Math.min(255, Math.round(b * factor)); // 相乘并限制蓝色分量
           } else {
-            const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
-
-            if (isLighten) {
-              return Math.min(255, Math.round(value * factor));
-            } else {
-              return Math.max(0, Math.round(value / factor));
-            }
+            newR = Math.max(0, Math.round((r >> 16) / factor)); // 对红色分量进行移位、除和限制
+            newG = Math.max(0, Math.round((g >> 8) / factor)); // 移位、除和限制绿色分量
+            newB = Math.max(0, Math.round(b / factor)); // 分割并限制蓝色分量
           }
-        });
+        }
 
-        // 处理溢出情况
-        adjusted = adjusted.map((value: number) => Math.min(255, Math.max(0, value)));
+        adjusted = (newR << 16) | (newG << 8) | newB; // 将新组件组合成新的颜色值
 
         newColor =
           '#' +
-          adjusted
-            .map((value: { toString: (arg0: number) => string; }) => value.toString(16).padStart(2, '0'))
-            .join('');
-      } while (newColor === color); // 循环直到生成不同的颜色
+          adjusted.toString(16).padStart(6, '0'); // 将新颜色值转换为字符串
+      } while (adjusted === rgb); // 循环，直到新颜色与原始颜色不同
 
       return newColor;
     };
 
-
     const randomInt = (min: number, max: number) => {
-      return Math.floor(Math.random() * (max - min + 1)) + min;
+      return Math.round(Math.random() * (max - min)) + min;
     };
 
+    // 将基色和扩色声明为常量
     const baseColor = randomColor();
-
     const diffColor = adjustColor(baseColor, diffPercentage, diffMode);
 
-    const diffRow = randomInt(0, n - 1);
-    const diffCol = randomInt(0, n - 1);
+    // 为不同的块(而不是行和列)生成随机索引
+    const diffIndex = randomInt(0, n * n - 1);
 
-    await ctx.model.set(GAME_ID, { guildId: guildId }, { block: diffRow * n + diffCol + 1 });
+    // 将块索引存储在模型中
+    await ctx.model.set(GAME_ID, { guildId: guildId }, { block: diffIndex + 1 });
 
-    const browserInstance = await getBrowserInstance();
+    const page = await (await browserManager.getBrowserInstance()).newPage();
 
-    const page = await browserInstance.newPage();
-
+    // 设置视区
     await page.setViewport({
       width: pictureSize,
       height: pictureSize,
       deviceScaleFactor: 1,
     });
 
-    let html: any;
+    let html: string = "";
+    // 使用对象文字将每种样式映射到其对应的 HTML 字符串
+    const styles = {
+      '1': `
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-    let styleTemp = style
-    // 判断style是否为'随机'
-    if (styleTemp === '随机') {
+.container {
+  display: grid;
+  grid-template-columns: repeat(${n}, ${blockSize}px);
+  grid-template-rows: repeat(${n}, ${blockSize}px);
+  font-family: sans-serif;
+  font-size: ${blockSize / 2}px;
+  color: black;
+  text-align: center;
+  line-height: ${blockSize}px;
+}
 
-      // 生成随机索引 
-      const randomIndex = Math.floor(Math.random() * 4);
+.block {
+  background-color: ${baseColor};
+  border: ${blockSize / 10}px solid white;
+  box-sizing: content-box; /* Add this line to exclude the border from the block's size */
+}
 
-      // 映射样式字符串
-      styleTemp = ['1', '2', '3'][randomIndex];
+.diff {
+  background-color: ${diffColor};
+}
+</style>
 
-    }
-
-    switch (styleTemp) {
-      case '1':
-        html = `<style>
-          * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-          }
-      
-          .container {
-            display: grid;
-            grid-template-columns: repeat(${n}, ${blockSize}px);
-            grid-template-rows: repeat(${n}, ${blockSize}px);
-            font-family: sans-serif;
-            font-size: ${blockSize / 2}px;
-            color: black;
-            text-align: center;
-            line-height: ${blockSize}px;
-          }
-      
-          .block {
-            background-color: ${baseColor};
-            border: ${blockSize / 10}px solid white;
-            box-sizing: content-box; /* Add this line to exclude the border from the block's size */
-          }
-      
-          .diff {
-            background-color: ${diffColor};
-          }
-        </style>
-      
-        <div class="container">`;
-        break;
-      case '2':
-        html = `<style>
-  * {
+<div class="container">
+`,
+      '2': `
+<style>
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -462,107 +470,89 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   box-shadow: inset -${blockSize / 10}px -${blockSize / 10}px ${blockSize / 5}px rgba(0,0,0,0.2); /* Use a shadow effect */
   background-image: linear-gradient(to bottom right, ${diffColor}, ${adjustColor(diffColor, 20, diffMode)}); /* Use a gradient background */
   }
-  </style>
-  <div class="container">`;
-        break;
-      case '3':
-        html = `<style>
-            * {
-              box-sizing: border-box;
-              margin: 0;
-              padding: 0;
-            }
-        
-            .container {
-              display: grid;
-              grid-template-columns: repeat(${n}, ${blockSize}px);
-              grid-template-rows: repeat(${n}, ${blockSize}px);
-              font-family: 'Comic Sans MS', cursive; /* Use a playful font */
-              font-size: ${blockSize / 2}px;
-              color: white;
-              text-align: center;
-              line-height: ${blockSize}px;
-            }
-        
-            .block {
-              background-color: ${baseColor};
-              border: none; /* Remove the border */
-              overflow: hidden; /* Hide any overflowing content */
-            }
-        
-            .diff {
-              background-color: ${diffColor};
-            }
-          </style>
-        
-          <div class="container">
-          `;
-        break;
-      default:
-        html = `<style>
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-    
-        .container {
-          display: grid;
-          grid-template-columns: repeat(${n}, ${blockSize}px);
-          grid-template-rows: repeat(${n}, ${blockSize}px);
-          font-family: 'Comic Sans MS', cursive; /* Use a playful font */
-          font-size: ${blockSize / 2}px;
-          color: white;
-          text-align: center;
-          line-height: ${blockSize}px;
-        }
-    
-        .block {
-          background-color: ${baseColor};
-          border: none; /* Remove the border */
-          overflow: hidden; /* Hide any overflowing content */
-        }
-    
-        .diff {
-          background-color: ${diffColor};
-        }
-      </style>
-    
-      <div class="container">
-      `;
-        break;
+</style>
+
+<div class="container">
+`,
+      '3': `
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  display: grid;
+  grid-template-columns: repeat(${n}, ${blockSize}px);
+  grid-template-rows: repeat(${n}, ${blockSize}px);
+  font-family: 'Comic Sans MS', cursive; /* Use a playful font */
+  font-size: ${blockSize / 2}px;
+  color: white;
+  text-align: center;
+  line-height: ${blockSize}px;
+}
+
+.block {
+  background-color: ${baseColor};
+  border: none; /* Remove the border */
+  overflow: hidden; /* Hide any overflowing content */
+}
+
+.diff {
+  background-color: ${diffColor};
+}
+</style>
+
+<div class="container">
+`,
+    };
+    let htmlStyleIndex = style
+    // 如果 style 为‘随机’，则使用三元运算符生成随机样式
+    if (htmlStyleIndex === '随机') {
+      htmlStyleIndex = ['1', '2', '3'][Math.floor(Math.random() * 3)]
     }
-    html += `<style>
-  .shrink {
-    font-size: ${blockSize / 3}px; 
-  }
+    // 将样式的 HTML 字符串追加到 html 变量
+    html += styles[htmlStyleIndex];
+
+    // 使用 += 运算符追加其他 HTML 字符串
+    html += `
+<style>
+.shrink {
+  font-size: ${blockSize / 3}px;
+}
 </style>`;
 
-    html += Array.from({ length: n * n }, (_, i) => {
+    // 使用 for 循环遍历块的数量，并将每个 HTML 字符串附加到 html 变量
+    for (let i = 0; i < n * n; i++) {
       const seqNum = i + 1;
-      const className =
-        i === diffRow * n + diffCol ? 'block diff' : 'block';
 
-      const numDigits = seqNum.toString().length;
+      // 使用三元运算符确定每个块的类名
+      const className = i === diffIndex ? 'block diff' : 'block';
+
+      // 使用 Math.log10 计算每个序列号中的位数
+      const numDigits = Math.floor(Math.log10(seqNum)) + 1;
+
+      // 使用三元运算符确定是否对每个序列号应用收缩类
       const shrinkClass = numDigits > 2 ? 'shrink' : '';
 
-      return `<div class="${className}">
+      html += `<div class="${className}">
     <span class="${shrinkClass}">${seqNum}</span>
   </div>`;
-    }).join('');
+    }
 
+    // 使用 html 变量设置页面内容
     await page.setContent(html);
 
-    let buffer: Buffer;
-    if (isCompressPicture) {
-      buffer = await page.screenshot({ type: 'jpeg', quality: pictureQuality });
-    } else {
-      buffer = await page.screenshot({ type: 'png' });
-    }
-    // 关闭插件时消除插件的副作用
+    // 将缓冲区声明为常量，并使用三元运算符为页面分配不同的选项。截图取决于 isCompressPicture
+    const buffer = await page.screenshot(
+      isCompressPicture ? { type: 'jpeg', quality: pictureQuality } : { type: 'png' }
+    );
+
     ctx.on('dispose', async () => {
-      await page.close()
-    })
+      await page.close();
+    });
+
     return buffer;
   }
 
