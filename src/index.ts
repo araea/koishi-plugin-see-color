@@ -97,8 +97,8 @@ export interface SeeColorRank {
 // puppeteer-finder模块可以查找本机安装的Chrome / Firefox / Edge浏览器
 
 
-export function apply(ctx: Context, config: Config) {
-  const executablePath = find();
+export async function apply(ctx: Context, config: Config) {
+  const executablePath = await find();
   // 过滤上下文，仅群聊可用
   ctx = ctx.guild()
   // 拓展表
