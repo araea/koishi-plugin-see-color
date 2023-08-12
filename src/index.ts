@@ -493,10 +493,6 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       isCompressPicture ? { type: 'jpeg', quality: pictureQuality } : { type: 'png' }
     );
 
-    ctx.on('dispose', async () => {
-      await page.close();
-    });
-
     return buffer;
   }
 
