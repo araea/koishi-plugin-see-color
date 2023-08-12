@@ -12,7 +12,7 @@ export const usage = `## ⚙️ 配置
 新增配置项：
 
 - \`diffMode\`: 色块差异模式。可选值为 "变浅"、"变深"、"随机"。默认值为 "随机"。
-- \`style\`: 色块样式。可选值为 "1"、"2"、"3"、"随机"。默认值为 "1"。
+- \`style\`: 色块样式。可选值为 "1"、"2"、"随机"。默认值为 "1"。
 
 图片配置：
 
@@ -56,7 +56,7 @@ export const Config: Schema<Config> = Schema.intersect([
       .union(['变浅', '变深', '随机']).default('随机')
       .role('radio').description('色块差异模式'),
     style: Schema
-      .union(['1', '2', '3', '随机']).default('1')
+      .union(['1', '2', '随机']).default('1')
       .role('radio').description('色块样式'),
   }).description('基础配置'),
   Schema.object({
@@ -95,15 +95,16 @@ export interface SeeColorRank {
 }
 
 // puppeteer-finder模块可以查找本机安装的Chrome / Firefox / Edge浏览器
-const executablePath = find();
+
 
 export function apply(ctx: Context, config: Config) {
+  const executablePath = find();
   // 过滤上下文，仅群聊可用
   ctx = ctx.guild()
   // 拓展表
   extendTables(ctx)
   // 注册 Koishi 指令： seeColor start guess stop restart rank
-  registerAllKoishiCommands(ctx, config)
+  registerAllKoishiCommands(ctx, config, executablePath)
 }
 
 function extendTables(ctx: Context) {
@@ -133,7 +134,7 @@ function extendTables(ctx: Context) {
   })
 }
 
-function registerAllKoishiCommands(ctx: Context, config: Config) {
+function registerAllKoishiCommands(ctx: Context, config: Config, executablePath: any) {
   // ID
   const GAME_ID = 'see_color_games'
   const RANK_ID = 'see_color_rank'
@@ -317,68 +318,46 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     const randomColor = () => {
       return '#' + Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
     };
+    const adjustColor = (color, percentage, mode) => {
+      const factor = 1 + Math.random() * (percentage / 200); // 随机因子
+      const rgb = parseInt(color.slice(1), 16); // 十六进制颜色转为整数
 
-    const adjustColor = (color: string | number, percentage: number, mode: string) => {
-      // 检查输入参数是否合法
-      if (
-        typeof color !== 'string' && typeof color !== 'number' ||
-        !/^#[0-9a-fA-F]{6}$/.test(color as string) ||
-        typeof percentage !== 'number' ||
-        percentage <= 0 ||
-        (mode !== '随机' && mode !== '变浅变深')
-      ) {
-        return '无效的输入';
-      }
-
-      const factor = 1 + Math.random() * (percentage / 100); // 随机因子
-
-      let rgb: number;
-
-      if (typeof color === 'string') {
-        rgb = parseInt(color.slice(1), 16); // 将字符串解析为数字
-      } else {
-        rgb = color;
-      }
-
-      let adjusted: number;
-      let newColor: string;
+      let adjusted; // 调整后的颜色值
+      let newColor; // 调整后的颜色字符串
 
       do {
-        const r = rgb & 0xff0000; // 提取红色成分
-        const g = rgb & 0x00ff00; // 提取绿色成分
-        const b = rgb & 0x0000ff; // 提取蓝色组件
+        adjusted = [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff].map((value) => {
+          // 按照模式调整颜色
+          return mode === '随机'
+            ? Math.random() < 0.5
+              ? Math.min(255, Math.round(value * factor))
+              : Math.max(0, Math.round(value / factor))
+            : mode === '变浅'
+              ? Math.min(255, Math.round(value * factor))
+              : mode === '变深'
+                ? Math.max(0, Math.round(value / factor))
+                : value;
+        });
 
-        let newR: number; // 使用一个数字来存储新的红色组件
-        let newG: number; // 使用一个数字来存储新的绿色组件
-        let newB: number; // 使用一个数字来存储新的蓝色组件
+        // 处理溢出情况
+        adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
 
-        if (mode === '随机') {
-          newR = Math.round((r >> 16) * factor); // 移动并乘以红色分量
-          newG = Math.round((g >> 8) * factor); // 移动并乘以绿色的部分
-          newB = Math.round(b * factor); // 乘以蓝色分量
-        } else {
-          const isLighten = Math.random() < 0.5; // 50% 概率变浅或变深
-
-          if (isLighten) {
-            newR = Math.min(255, Math.round((r >> 16) * factor)); // 移位、相乘和限制红色分量
-            newG = Math.min(255, Math.round((g >> 8) * factor)); // 移位、相乘和限制绿色分量
-            newB = Math.min(255, Math.round(b * factor)); // 相乘并限制蓝色分量
-          } else {
-            newR = Math.max(0, Math.round((r >> 16) / factor)); // 对红色分量进行移位、除和限制
-            newG = Math.max(0, Math.round((g >> 8) / factor)); // 移位、除和限制绿色分量
-            newB = Math.max(0, Math.round(b / factor)); // 分割并限制蓝色分量
-          }
-        }
-
-        adjusted = (newR << 16) | (newG << 8) | newB; // 将新组件组合成新的颜色值
-
+        // 整数转为十六进制颜色
         newColor =
           '#' +
-          adjusted.toString(16).padStart(6, '0'); // 将新颜色值转换为字符串
-      } while (adjusted === rgb); // 循环，直到新颜色与原始颜色不同
+          adjusted
+            .reduce((acc, cur) => (acc << 8) + cur, 0)
+            .toString(16)
+            .padStart(6, '0');
+      } while (newColor === color); // 循环直到生成不同的颜色
 
       return newColor;
     };
+
+
+
+
+
 
     const randomInt = (min: number, max: number) => {
       return Math.round(Math.random() * (max - min)) + min;
@@ -444,42 +423,6 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  }
-  
-  .container {
-  display: grid;
-  grid-template-columns: repeat(${n}, ${blockSize}px);
-  grid-template-rows: repeat(${n}, ${blockSize}px);
-  font-family: 'Roboto', sans-serif; /* Use a different font */
-  font-size: ${blockSize / 2}px;
-  color: black;
-  text-align: center;
-  line-height: ${blockSize}px;
-  }
-  
-  .block {
-  background-color: ${baseColor};
-  border-radius: ${blockSize / 4}px; /* Use a rounded border */
-  box-shadow: inset -${blockSize / 10}px -${blockSize / 10}px ${blockSize / 5}px rgba(0,0,0,0.2); /* Use a shadow effect */
-  background-image: linear-gradient(to bottom right, ${baseColor}, ${adjustColor(baseColor, 20, diffMode)}); /* Use a gradient background */
-  }
-  
-  .diff {
-  background-color: ${diffColor};
-  border-radius: ${blockSize / 4}px; /* Use a rounded border */
-  box-shadow: inset -${blockSize / 10}px -${blockSize / 10}px ${blockSize / 5}px rgba(0,0,0,0.2); /* Use a shadow effect */
-  background-image: linear-gradient(to bottom right, ${diffColor}, ${adjustColor(diffColor, 20, diffMode)}); /* Use a gradient background */
-  }
-</style>
-
-<div class="container">
-`,
-      '3': `
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 .container {
@@ -496,6 +439,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 .block {
   background-color: ${baseColor};
   border: none; /* Remove the border */
+  border-collapse: collapse; /* Collapse table borders */
   overflow: hidden; /* Hide any overflowing content */
 }
 
@@ -510,7 +454,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     let htmlStyleIndex = style
     // 如果 style 为‘随机’，则使用三元运算符生成随机样式
     if (htmlStyleIndex === '随机') {
-      htmlStyleIndex = ['1', '2', '3'][Math.floor(Math.random() * 3)]
+      htmlStyleIndex = ['1', '2'][Math.floor(Math.random() * 3)]
     }
     // 将样式的 HTML 字符串追加到 html 变量
     html += styles[htmlStyleIndex];
