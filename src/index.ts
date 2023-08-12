@@ -288,7 +288,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
         this.browser = await puppeteer.launch({
           executablePath: executablePath,
           headless: "new",
-          args: ['--no-sandbox', '--disable-gpu'],
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
         });
       }
       return this.browser;
