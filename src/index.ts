@@ -172,12 +172,12 @@ function registerAllKoishiCommands(ctx: Context, config: Config, executablePath:
     })
 
   // test
-  ctx.command('seeColor.test', '测试')
-    .action(async ({ session }) => {
-      // 开始游戏
-      const buffer = await generatePictureBuffer(60, ctx, session.guildId)
-      await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
-    })
+  // ctx.command('seeColor.test', '测试')
+  //   .action(async ({ session }) => {
+  //     // 开始游戏
+  //     const buffer = await generatePictureBuffer(60, ctx, session.guildId)
+  //     await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
+  //   })
 
   // guess
   ctx.command('seeColor.guess <number:number>', '猜色块').alias('块')
