@@ -1,6 +1,9 @@
 import { Context, Schema, h } from 'koishi'
 import find from 'puppeteer-finder'
 import puppeteer, { Browser } from "puppeteer-core";
+import tmp from 'tmp'
+import fs from 'fs'
+import { result } from 'lodash';
 
 export const name = 'see-color'
 export const usage = `## ⚙️ 配置
@@ -45,7 +48,6 @@ export interface Config {
   diffPercentage: number
   diffMode: string
   style: string
-
 }
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
@@ -86,6 +88,7 @@ export interface SeeColorGames {
   isStarted: boolean
   level: number
   block: number
+  path: string
 }
 export interface SeeColorRank {
   id: number
@@ -116,6 +119,7 @@ function extendTables(ctx: Context) {
     isStarted: 'boolean',
     level: 'integer',
     block: 'integer',
+    path: 'string',
   }, {
     // 使用自增的主键值
     autoInc: true,
@@ -161,14 +165,48 @@ function registerAllKoishiCommands(ctx: Context, config: Config, executablePath:
     .action(async ({ session }) => {
       // 获取游戏信息
       const gameInfo = await getGameInfo(ctx, session.guildId)
-      if (gameInfo.isStarted) {
-        return msg.isStarted
+      const result = processGameInfo(gameInfo)
+      if (result !== null) {
+        return result
       }
       // 开始游戏
       const buffer = await generatePictureBuffer(initialLevel, ctx, session.guildId)
       await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, 'image/png')}\n${msg.guess}`)
       // 更新游戏状态
       updateGameState(ctx, session.guildId, true, initialLevel)
+
+      function getImageBufferFromPath(imagePath) {
+        return new Promise((resolve, reject) => {
+          fs.readFile(imagePath, (err, data) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(data);
+            }
+          });
+        });
+      }
+      function isFileExists(path) {
+        return new Promise((resolve) => {
+          fs.access(path, fs.constants.F_OK, (err) => {
+            resolve(!err);
+          });
+        });
+      }
+
+      async function processGameInfo(gameInfo) {
+        if (gameInfo.isStarted) {
+          const isExists = await isFileExists(gameInfo.path);
+          if (!isExists) {
+            return msg.isStarted;
+          }
+
+          const buffer = await getImageBufferFromPath(gameInfo.path) as any;
+          return `${msg.isStarted}\n${h.image(buffer, 'image/png')}`;
+        }
+
+        return null;
+      }
     })
 
   // test
@@ -305,9 +343,15 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   // 创建 BrowserManager 的实例
   const browserManager = new BrowserManager();
 
+  // 声明一个变量来保存 cleanupCallback
+  let myCleanupCallback;
+
   // 关闭插件时消除插件的副作用
   ctx.on('dispose', async () => {
     await browserManager.closeBrowserInstance();
+    if (myCleanupCallback) {
+      myCleanupCallback();
+    }
   })
 
   // 核心功能实现
@@ -454,7 +498,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     let htmlStyleIndex = style
     // 如果 style 为‘随机’，则使用三元运算符生成随机样式
     if (htmlStyleIndex === '随机') {
-      htmlStyleIndex = ['1', '2'][Math.floor(Math.random() * 3)]
+      htmlStyleIndex = ['1', '2'][Math.floor(Math.random() * 2)];
     }
     // 将样式的 HTML 字符串追加到 html 变量
     html += styles[htmlStyleIndex];
@@ -493,6 +537,21 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
       isCompressPicture ? { type: 'jpeg', quality: pictureQuality } : { type: 'png' }
     );
 
+    // 使用 tmp.file 方法创建一个临时文件
+    tmp.file(function (err, path, fd, cleanupCallback) {
+      if (err) throw err;
+
+      // 使用 fs.write 方法将缓冲区的内容写入到文件中
+      fs.write(fd, buffer, 0, buffer.length, 0, async function (err, written, buffer) {
+        if (err) throw err;
+        await ctx.model.set(GAME_ID, { guildId: guildId }, { path: path })
+
+        // 如果不需要文件了，可以手动调用清理回调函数，或者等待程序退出时自动清理
+        // 将 cleanupCallback 赋值给外部变量 myCleanupCallback
+        myCleanupCallback = cleanupCallback;
+        // cleanupCallback();
+      });
+    });
     return buffer;
   }
 
