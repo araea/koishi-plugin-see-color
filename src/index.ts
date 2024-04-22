@@ -305,38 +305,39 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     const randomColor = () => {
       return '#' + Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
     };
-    const adjustColor = (color, percentage, mode) => {
-      const factor = 1 + Math.random() * (percentage / 200); // 随机因子
-      const rgb = parseInt(color.slice(1), 16); // 十六进制颜色转为整数
 
-      let adjusted; // 调整后的颜色值
-      let newColor; // 调整后的颜色字符串
+    const adjustColor = (color, percentage, mode, maxIterations = 100) => {
+      const rgb = parseInt(color.slice(1), 16);
+
+      let newColor;
+      let iterations = 0;
 
       do {
-        adjusted = [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff].map((value) => {
-          // 按照模式调整颜色
-          return mode === '随机'
-            ? Math.random() < 0.5
-              ? Math.min(255, Math.round(value * factor))
-              : Math.max(0, Math.round(value / factor))
-            : mode === '变浅'
-              ? Math.min(255, Math.round(value * factor))
-              : mode === '变深'
-                ? Math.max(0, Math.round(value / factor))
-                : value;
+        const factor = 1 + Math.random() * (percentage / 200); // Generate a random factor
+        const adjusted = [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff].map((value) => {
+          let newValue;
+          if (mode === '随机') {
+            newValue = Math.random() < 0.5 ? Math.min(255, Math.round(value * factor)) : Math.max(0, Math.round(value / factor));
+          } else if (mode === '变浅') {
+            newValue = Math.min(255, Math.round(value * factor));
+          } else if (mode === '变深') {
+            newValue = Math.max(0, Math.round(value / factor));
+          } else {
+            newValue = value;
+          }
+          return newValue;
         });
 
-        // 处理溢出情况
-        adjusted = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+        const adjustedColor = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+        newColor = '#' + adjustedColor.reduce((acc, cur) => (acc << 8) + cur, 0).toString(16).padStart(6, '0');
 
-        // 整数转为十六进制颜色
-        newColor =
-          '#' +
-          adjusted
-            .reduce((acc, cur) => (acc << 8) + cur, 0)
-            .toString(16)
-            .padStart(6, '0');
-      } while (newColor === color); // 循环直到生成不同的颜色
+        iterations++;
+
+        if (iterations >= maxIterations) {
+          newColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+          break;
+        }
+      } while (newColor === color);
 
       return newColor;
     };
