@@ -29,8 +29,10 @@ export interface Config {
   initialLevel: number
   diffPercentage: number
   pictureQuality: number
+  maxImageDimensions: number
   isCompressPicture: boolean
   isNumericGuessMiddlewareEnabled: boolean
+  shouldInterruptMiddlewareChainAfterTriggered: boolean
 }
 
 export const Config: Schema<Config> = Schema.intersect([
@@ -40,7 +42,9 @@ export const Config: Schema<Config> = Schema.intersect([
     diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比。'),
     diffMode: Schema.union(['变浅', '变深', '随机']).default('随机').role('radio').description('色块差异模式。'),
     style: Schema.union(['1', '2', '随机']).default('随机').role('radio').description('色块样式。'),
+    maxImageDimensions: Schema.number().default(2000).description('图片的最大尺寸（像素）。'),
     isNumericGuessMiddlewareEnabled: Schema.boolean().default(true).description('是否启用数字猜测中间件。'),
+    shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true).description('是否在触发后中断中间件链。'),
   }).description('基础配置'),
   Schema.object({
     isCompressPicture: Schema.boolean().default(false).description('是否压缩图片（不建议）。'),
@@ -146,6 +150,11 @@ export function apply(ctx: Context, config: Config) {
       return await next()
     }
     await session.execute(`seeColor.猜 ${session.content}`)
+    if (config.shouldInterruptMiddlewareChainAfterTriggered) {
+      return
+    } else {
+      return await next()
+    }
   })
   // zl*
   // bz* h*
@@ -285,10 +294,10 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   }
 
   async function generatePictureBuffer(n: number, channelId: string) {
-    const {blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality} = config;
+    const {blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality, maxImageDimensions} = config;
     let pictureSize = blockSize * n;
-    if (pictureSize > 2000) {
-      pictureSize = 2000;
+    if (pictureSize > maxImageDimensions) {
+      pictureSize = maxImageDimensions;
     }
 
     const randomColor = () => {
