@@ -78,7 +78,6 @@ export interface SeeColorGame {
   isStarted: boolean
   level: number
   block: number
-  path: string
 }
 
 export interface SeeColorPlayingRecord {
@@ -102,9 +101,6 @@ export function apply(ctx: Context, config: Config) {
   const filePath = path.join(__dirname, 'emptyHtml.html').replace(/\\/g, '/');
   const pageGotoFilePath = 'file://' + filePath;
   // cl*
-  const GAME_ID = 'see_color_games'
-  const PLAYING_RECORD_ID = 'see_color_playing_records'
-  const RANK_ID = 'see_color_rank'
   const msg = {
     start: `游戏开始啦！🎉`,
     guess: `请发送 [猜测指令 + 数字序号] 来找到不一样的色块吧~\n注意喔~指令与数字之间需要存在一个空格！😉`,
@@ -117,18 +113,17 @@ export function apply(ctx: Context, config: Config) {
     isNotStarted: `游戏还没开始呢~😮\n快开始游戏吧~😁`
   }
   // tzb*
-  ctx.database.extend(GAME_ID, {
+  ctx.database.extend('see_color_games', {
     id: 'unsigned',
     channelId: 'string',
     isStarted: 'boolean',
     level: 'integer',
     block: 'integer',
-    path: 'string',
   }, {
     primary: 'id',
     autoInc: true,
   })
-  ctx.database.extend(PLAYING_RECORD_ID, {
+  ctx.database.extend('see_color_playing_records', {
     id: 'unsigned',
     channelId: 'string',
     userId: 'string',
@@ -138,7 +133,7 @@ export function apply(ctx: Context, config: Config) {
     primary: 'id',
     autoInc: true,
   })
-  ctx.database.extend(RANK_ID, {
+  ctx.database.extend('see_color_rank', {
     id: 'unsigned',
     userId: 'string',
     userName: 'string',
@@ -203,7 +198,7 @@ export function apply(ctx: Context, config: Config) {
         await updateRank(session.userId, session.username, playingRecord.score)
         // 继续游戏
         const buffer = await generatePictureBuffer(gameInfo.level + 1, session.channelId)
-        await session.send(`${h.at(session.userId)} ~\n${msg.guessRight}\n你获得了 ${gameInfo.level} 点积分喔~ 再接再厉喵~😊\n${h.image(buffer, 'image/png')}\n${msg.continue}`)
+        await session.send(`${h.at(session.userId)} ~\n${msg.guessRight}\n你获得了 ${gameInfo.level} 点积分喔~ 再接再厉喵~😊\n${h.image(buffer, `image/${config.isCompressPicture ? `jpeg` : `png`}`)}\n${msg.continue}`)
         // 更新游戏状态
         await updateGameState(session.channelId, true, gameInfo.level + 1)
         return
@@ -217,8 +212,8 @@ export function apply(ctx: Context, config: Config) {
       // 获取游戏信息
       const gameInfo = await getGameInfo(session.channelId)
       if (gameInfo.isStarted) {
-        await ctx.database.remove(PLAYING_RECORD_ID, {channelId: session.channelId})
-        await ctx.database.set(GAME_ID, {channelId: session.channelId}, {isStarted: false})
+        await ctx.database.remove('see_color_playing_records', {channelId: session.channelId})
+        await ctx.database.set('see_color_games', {channelId: session.channelId}, {isStarted: false})
         await session.send(`${h.at(session.userId)} ~\n嘿嘿~🤭猜不出来吧~\n刚才的答案是块 ${gameInfo.block} 喔~\n${msg.stopped}`)
       } else {
         return msg.isNotStarted
@@ -227,7 +222,7 @@ export function apply(ctx: Context, config: Config) {
   // r* phb* sb*
   ctx.command('seeColor.排行榜', '查看色榜')
     .action(async ({}) => {
-      const rankInfo: SeeColorRank[] = await ctx.database.get(RANK_ID, {})
+      const rankInfo: SeeColorRank[] = await ctx.database.get('see_color_rank', {})
 
       rankInfo.sort((a, b) => b.score - a.score)
 
@@ -247,25 +242,25 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
   // hs*
   async function updatePlayingRecord(session, gameInfo) {
-    let playingRecord = await ctx.database.get(PLAYING_RECORD_ID, {
+    let playingRecord = await ctx.database.get('see_color_playing_records', {
       userId: session.userId,
       channelId: session.channelId
     });
 
     if (playingRecord.length === 0) {
-      return await ctx.database.create(PLAYING_RECORD_ID, {
+      return await ctx.database.create('see_color_playing_records', {
         channelId: session.channelId,
         userId: session.userId,
         username: session.username,
         score: gameInfo.level
       });
     } else {
-      await ctx.database.set(PLAYING_RECORD_ID, {userId: session.userId}, {
+      await ctx.database.set('see_color_playing_records', {channelId: session.channelId, userId: session.userId}, {
         username: session.username,
         score: playingRecord[0].score + gameInfo.level
       });
 
-      playingRecord = await ctx.database.get(PLAYING_RECORD_ID, {
+      playingRecord = await ctx.database.get('see_color_playing_records', {
         userId: session.userId,
         channelId: session.channelId
       });
@@ -275,11 +270,11 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   }
 
   async function updateRank(userId: string, userName: string, score: number) {
-    const rankInfo: SeeColorRank[] = await ctx.database.get(RANK_ID, {userId: userId})
+    const rankInfo: SeeColorRank[] = await ctx.database.get('see_color_rank', {userId: userId})
     if (rankInfo.length === 0) {
-      await ctx.database.create(RANK_ID, {userId: userId, userName: userName, score: score})
+      await ctx.database.create('see_color_rank', {userId: userId, userName: userName, score: score})
     } else if (rankInfo[0].score < score) {
-      await ctx.database.set(RANK_ID, {userId: userId}, {userName: userName, score: score})
+      await ctx.database.set('see_color_rank', {userId: userId}, {userName: userName, score: score})
     }
   }
 
@@ -288,16 +283,16 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   }
 
   async function getGameInfo(channelId: string): Promise<SeeColorGame> {
-    const gameInfo = await ctx.database.get(GAME_ID, {channelId: channelId})
+    const gameInfo = await ctx.database.get('see_color_games', {channelId: channelId})
     if (gameInfo.length === 0) {
-      return await ctx.database.create(GAME_ID, {channelId: channelId, isStarted: false})
+      return await ctx.database.create('see_color_games', {channelId: channelId, isStarted: false})
     } else {
       return gameInfo[0]
     }
   }
 
   async function updateGameState(channelId: string, isStarted: boolean, level: number) {
-    await ctx.database.set(GAME_ID, {channelId: channelId}, {isStarted: isStarted, level: level})
+    await ctx.database.set('see_color_games', {channelId: channelId}, {isStarted: isStarted, level: level})
   }
 
   async function generatePictureBuffer(n: number, channelId: string) {
@@ -358,7 +353,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     // 为不同的块(而不是行和列)生成随机索引
     const diffIndex = randomInt(0, n * n - 1);
 
-    await ctx.database.set(GAME_ID, {channelId: channelId}, {block: diffIndex + 1});
+    await ctx.database.set('see_color_games', {channelId: channelId}, {block: diffIndex + 1});
 
     let html: string = "";
     const styles = {
