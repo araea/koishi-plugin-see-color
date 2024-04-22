@@ -56,7 +56,7 @@ export const Config: Schema<Config> = Schema.intersect([
     }),
     Schema.object({}),
   ]),
-]) as Schema<Config>
+]) as any
 
 // smb*
 declare module 'koishi' {
