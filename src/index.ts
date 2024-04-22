@@ -19,7 +19,11 @@ export const usage = `## 🎮 使用
 - \`seeColor.开始\`: 开始一个新的游戏。
 - \`seeColor.猜 <number>\`: 猜测不同颜色方块的序号。
 - \`seeColor.结束\`: 结束当前的游戏。
-- \`seeColor.排行榜\`: 查看玩家的排名，根据他们的分数。`
+- \`seeColor.排行榜\`: 查看玩家的排名，根据他们的分数。
+
+## 🐱 QQ 群
+
+-  956758505`
 
 // pz* pzx*
 export interface Config {
@@ -147,6 +151,9 @@ export function apply(ctx: Context, config: Config) {
   ctx.middleware(async (session, next) => {
     const gameInfo = await getGameInfo(session.channelId)
     if (!gameInfo.isStarted || !config.isNumericGuessMiddlewareEnabled || !isNumericString(session.content)) {
+      return await next()
+    }
+    if (parseInt(session.content, 10) > gameInfo.level * gameInfo.level) {
       return await next()
     }
     await session.execute(`seeColor.猜 ${session.content}`)
@@ -377,7 +384,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 .block {
   background-color: ${baseColor};
   border: ${blockSize / 10}px solid white;
-  box-sizing: content-box; /* Add this line to exclude the border from the block's size */
+  box-sizing: content-box;
 }
 
 .diff {

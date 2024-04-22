@@ -58,6 +58,16 @@
 * [longyong](https://forum.koishi.xyz/u/longyong/summary) - 提供动力
 * [yunzai · 闲心/xianxin-plugin](https://gitee.com/xianxincoder/xianxin-plugin/blob/master/apps/seecolor.js) - 提供参考
 
+## 🐱 QQ 群
+
+- 956758505
+
 ## 📄 License
 
 MIT License © 2024
+
+希望您喜欢这款插件！ 💫
+
+如有任何问题或建议，欢迎联系我哈~ 🎈
+
+
