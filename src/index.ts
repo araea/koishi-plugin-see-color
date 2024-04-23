@@ -27,14 +27,13 @@ export const usage = `## 🎮 使用
 
 // pz* pzx*
 export interface Config {
-  style: string
   diffMode: string
   blockSize: number
   initialLevel: number
   diffPercentage: number
   pictureQuality: number
-  maxImageDimensions: number
   isCompressPicture: boolean
+  spacingBetweenGrids: number
   isNumericGuessMiddlewareEnabled: boolean
   shouldInterruptMiddlewareChainAfterTriggered: boolean
 }
@@ -45,8 +44,7 @@ export const Config: Schema<Config> = Schema.intersect([
     blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）。'),
     diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比。'),
     diffMode: Schema.union(['变浅', '变深', '随机']).default('随机').role('radio').description('色块差异模式。'),
-    style: Schema.union(['1', '2', '随机']).default('随机').role('radio').description('色块样式。'),
-    maxImageDimensions: Schema.number().default(2000).description('图片的最大尺寸（像素）。'),
+    spacingBetweenGrids: Schema.number().default(10).description('色块之间的水平与垂直间距（像素）。'),
     isNumericGuessMiddlewareEnabled: Schema.boolean().default(true).description('是否启用数字猜测中间件。'),
     shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true).description('是否在触发后中断中间件链。'),
   }).description('基础配置'),
@@ -103,7 +101,7 @@ export function apply(ctx: Context, config: Config) {
   // cl*
   const msg = {
     start: `游戏开始啦！🎉`,
-    guess: `请发送 [猜测指令 + 数字序号] 来找到不一样的色块吧~\n注意喔~指令与数字之间需要存在一个空格！😉`,
+    guess: `请发送类似 '行号 列号' 这样的坐标来找到不一样的色块吧~\n注意喔~数字之间需要存在一个空格！😉`,
     guessRight: `恭喜你猜对了！👏你真厉害呀~😍`,
     guessWrong: `猜错了哦~😅快再试一次吧！😊`,
     continue: `让我们继续吧~这回看看你能猜出来嘛~😜`,
@@ -145,13 +143,16 @@ export function apply(ctx: Context, config: Config) {
   // zjj*
   ctx.middleware(async (session, next) => {
     const gameInfo = await getGameInfo(session.channelId)
-    if (!gameInfo.isStarted || !config.isNumericGuessMiddlewareEnabled || !isNumericString(session.content)) {
+    if (!gameInfo.isStarted || !config.isNumericGuessMiddlewareEnabled) {
       return await next()
     }
-    if (parseInt(session.content, 10) > gameInfo.level * gameInfo.level) {
+    if (checkFormat(session.content, gameInfo.level)) {
+      await session.execute(`seeColor.猜 ${session.content}`)
+    } else if (isValidNumber(session.content, gameInfo.level)) {
+      await session.execute(`seeColor.猜 ${session.content}`)
+    } else {
       return await next()
     }
-    await session.execute(`seeColor.猜 ${session.content}`)
     if (config.shouldInterruptMiddlewareChainAfterTriggered) {
       return
     } else {
@@ -180,16 +181,38 @@ export function apply(ctx: Context, config: Config) {
       await updateGameState(session.channelId, true, config.initialLevel)
     })
   // c*
-  ctx.command('seeColor.猜 <number:number>', '猜色块')
-    .action(async ({session}, number) => {
+  ctx.command('seeColor.猜 <numberString:text>', '猜色块')
+    .action(async ({session}, numberString) => {
       // 检验参数
-      if (!number || isNaN(number)) {
-        return
+      if (!numberString) {
+        return msg.guess
       }
+
       // 获取游戏信息
       const gameInfo = await getGameInfo(session.channelId)
+      const isCheckFormat = checkFormat(numberString, gameInfo.level)
+      const isValidNumberString = isValidNumber(numberString, gameInfo.level)
+      if (!isCheckFormat && !isValidNumberString) {
+        return msg.guess
+      }
+
       if (!gameInfo.isStarted) {
-        return
+        return msg.isNotStarted
+      }
+
+      let number = 0;
+      const {row, col} = getRowCol(gameInfo.level, gameInfo.block - 1);
+      if (isValidNumberString) {
+        number = parseFloat(numberString);
+      } else {
+        const [rowStr, colStr] = numberString.split(' ');
+        const rowNumber = parseInt(rowStr);
+        const colNumber = parseInt(colStr);
+        if (rowNumber === row + 1 && colNumber === col + 1) {
+          number = gameInfo.block;
+        } else {
+          return msg.guessWrong
+        }
       }
 
       if (number === gameInfo.block) {
@@ -241,6 +264,94 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     })
 
   // hs*
+  function isValidNumber(content: string, level: number): boolean {
+    // 使用正则表达式检查字符串是否为一个合法的数字
+    const isValidFormat = /^\d+(\.\d+)?$/.test(content);
+
+    if (!isValidFormat) {
+      return false;
+    }
+
+    const number = parseFloat(content);
+
+    // 检查数字是否在指定范围内
+    if (number >= 1 && number <= level * level) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function checkFormat(content: string, level: number): boolean {
+    const regex = /^\d+\s\d+$/; // 正则表达式匹配数字 空格 数字的格式
+
+    if (!regex.test(content)) {
+      return false; // 如果不符合格式直接返回 false
+    }
+
+    const [num1, num2] = content.split(' ').map(Number); // 将字符串按空格分割并转换为数字
+
+    if (isNaN(num1) || isNaN(num2)) {
+      return false; // 如果无法解析数字则返回 false
+    }
+
+    if (num1 < 1 || num1 > level || num2 < 1 || num2 > level) {
+      return false; // 如果数字不在范围内返回 false
+    }
+
+    return true; // 符合所有条件，返回 true
+  }
+
+  function getRowCol(n: number, diffIndex: number): { row: number, col: number } {
+    const row = Math.floor(diffIndex / n);
+    const col = diffIndex % n;
+    return {row, col};
+  }
+
+  function adjustColor(color, percentage, mode, maxIterations = 100) {
+    const rgb = parseInt(color.slice(1), 16);
+
+    let newColor;
+    let iterations = 0;
+
+    do {
+      const factor = 1 + Math.random() * (percentage / 200); // Generate a random factor
+      const adjusted = [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff].map((value) => {
+        let newValue;
+        if (mode === '随机') {
+          newValue = Math.random() < 0.5 ? Math.min(255, Math.round(value * factor)) : Math.max(0, Math.round(value / factor));
+        } else if (mode === '变浅') {
+          newValue = Math.min(255, Math.round(value * factor));
+        } else if (mode === '变深') {
+          newValue = Math.max(0, Math.round(value / factor));
+        } else {
+          newValue = value;
+        }
+        return newValue;
+      });
+
+      const adjustedColor = adjusted.map((value) => Math.min(255, Math.max(0, value)));
+      newColor = '#' + adjustedColor.reduce((acc, cur) => (acc << 8) + cur, 0).toString(16).padStart(6, '0');
+
+      iterations++;
+
+      if (iterations >= maxIterations) {
+        newColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+        break;
+      }
+    } while (newColor === color);
+
+    return newColor;
+  }
+
+  function randomInt(min: number, max: number) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function randomColor() {
+    return '#' + Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
+  }
+
   async function updatePlayingRecord(session, gameInfo) {
     let playingRecord = await ctx.database.get('see_color_playing_records', {
       userId: session.userId,
@@ -296,56 +407,14 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   }
 
   async function generatePictureBuffer(n: number, channelId: string) {
-    const {blockSize, diffPercentage, diffMode, isCompressPicture, style, pictureQuality, maxImageDimensions} = config;
-    let pictureSize = blockSize * n;
-    if (pictureSize > maxImageDimensions) {
-      pictureSize = maxImageDimensions;
-    }
-
-    const randomColor = () => {
-      return '#' + Math.floor(Math.random() * 16777216).toString(16).padStart(6, '0');
-    };
-
-    const adjustColor = (color, percentage, mode, maxIterations = 100) => {
-      const rgb = parseInt(color.slice(1), 16);
-
-      let newColor;
-      let iterations = 0;
-
-      do {
-        const factor = 1 + Math.random() * (percentage / 200); // Generate a random factor
-        const adjusted = [rgb >> 16, (rgb >> 8) & 0xff, rgb & 0xff].map((value) => {
-          let newValue;
-          if (mode === '随机') {
-            newValue = Math.random() < 0.5 ? Math.min(255, Math.round(value * factor)) : Math.max(0, Math.round(value / factor));
-          } else if (mode === '变浅') {
-            newValue = Math.min(255, Math.round(value * factor));
-          } else if (mode === '变深') {
-            newValue = Math.max(0, Math.round(value / factor));
-          } else {
-            newValue = value;
-          }
-          return newValue;
-        });
-
-        const adjustedColor = adjusted.map((value) => Math.min(255, Math.max(0, value)));
-        newColor = '#' + adjustedColor.reduce((acc, cur) => (acc << 8) + cur, 0).toString(16).padStart(6, '0');
-
-        iterations++;
-
-        if (iterations >= maxIterations) {
-          newColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-          break;
-        }
-      } while (newColor === color);
-
-      return newColor;
-    };
-
-
-    const randomInt = (min: number, max: number) => {
-      return Math.round(Math.random() * (max - min)) + min;
-    };
+    const {
+      blockSize,
+      diffPercentage,
+      diffMode,
+      isCompressPicture,
+      pictureQuality,
+      spacingBetweenGrids
+    } = config;
 
     // 将基色和扩色声明为常量
     const baseColor = randomColor();
@@ -353,110 +422,89 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
 
     // 为不同的块(而不是行和列)生成随机索引
     const diffIndex = randomInt(0, n * n - 1);
-
+    const {row, col} = getRowCol(n, diffIndex);
+    const offset = blockSize;
+    const canvasSize = n * blockSize + (n - 1) * spacingBetweenGrids + offset * 2;
+    // db*
     await ctx.database.set('see_color_games', {channelId: channelId}, {block: diffIndex + 1});
 
-    let html: string = "";
-    const styles = {
-      '1': `
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-.container {
-  display: grid;
-  grid-template-columns: repeat(${n}, ${blockSize}px);
-  grid-template-rows: repeat(${n}, ${blockSize}px);
-  font-family: sans-serif;
-  font-size: ${blockSize / 2}px;
-  color: black;
-  text-align: center;
-  line-height: ${blockSize}px;
-}
-
-.block {
-  background-color: ${baseColor};
-  border: ${blockSize / 10}px solid white;
-  box-sizing: content-box;
-}
-
-.diff {
-  background-color: ${diffColor};
-}
-</style>
-
-<div class="container">
-`,
-      '2': `
-<style>
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-.container {
-  display: grid;
-  grid-template-columns: repeat(${n}, ${blockSize}px);
-  grid-template-rows: repeat(${n}, ${blockSize}px);
-  font-family: 'Comic Sans MS', cursive;
-  font-size: ${blockSize / 2}px;
-  color: white;
-  text-align: center;
-  line-height: ${blockSize}px;
-}
-
-.block {
-  background-color: ${baseColor};
-  border: none;
-  border-collapse: collapse;
-  overflow: hidden;
-}
-
-.diff {
-  background-color: ${diffColor};
-}
-</style>
-
-<div class="container">
-`,
-    };
-    let htmlStyleIndex = style;
-    if (htmlStyleIndex === '随机') {
-      htmlStyleIndex = ['1', '2'][Math.floor(Math.random() * 2)];
-    }
-    html += styles[htmlStyleIndex];
-
-    html += `
+    let html: string = `
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>色块网格</title>
     <style>
-    .shrink {
-        font-size: ${blockSize / 3}px;
-    }
-    </style>`;
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        canvas {
+            /*border: 1px solid #000;*/
+        }
+    </style>
+</head>
+<body>
+<canvas id="colorGridCanvas"></canvas>
+<script>
+    const n = ${n}; // 网格的大小
+    const blockSize = ${blockSize}; // 色块的边长
+    const spacingBetweenGrids = ${spacingBetweenGrids}; // 色块间距
+    const baseColor = '${baseColor}'; // 基础色块颜色
+    const diffColor = '${diffColor}'; // 不同色块的颜色
+    const offset = ${offset}; // 行号和列号的偏移量
 
-    for (let i = 0; i < n * n; i++) {
-      const seqNum = i + 1;
-      const className = i === diffIndex ? 'block diff' : 'block';
-      const numDigits = Math.floor(Math.log10(seqNum)) + 1;
-      const shrinkClass = numDigits > 2 ? 'shrink' : '';
+    const canvas = document.getElementById('colorGridCanvas');
+    const ctx = canvas.getContext('2d');
 
-      html += `<div class="${className}">
-            <span class="${shrinkClass}">${seqNum}</span>
-        </div>`;
+    // 设置 canvas 大小，增加额外空间用于显示行号和列号
+    canvas.width = ${canvasSize};
+    canvas.height = ${canvasSize};
+
+    // 随机选择一个色块改变颜色
+    const diffBlockRow = ${row};
+    const diffBlockCol = ${col};
+
+    // 绘制色块网格
+    for (let row = 0; row < n; row++) {
+        for (let col = 0; col < n; col++) {
+            const color = (row === diffBlockRow && col === diffBlockCol) ? diffColor : baseColor;
+            const x = col * (blockSize + spacingBetweenGrids) + offset;
+            const y = row * (blockSize + spacingBetweenGrids) + offset;
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, blockSize, blockSize);
+        }
     }
+
+    // 设置字体样式
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // 在色块外侧显示行号和列号
+    for (let i = 0; i < n; i++) {
+        // 显示列号
+        ctx.fillText(i + 1, i * (blockSize + spacingBetweenGrids) + blockSize / 2 + offset, blockSize / 2);
+        // 显示行号
+        ctx.fillText(i + 1, blockSize / 2, i * (blockSize + spacingBetweenGrids) + blockSize / 2 + offset);
+    }
+</script>
+</body>
+</html>
+`;
 
     const browser = ctx.puppeteer.browser;
     const context = await browser.createBrowserContext();
     const page = await context.newPage();
 
-    await page.setViewport({width: pictureSize, height: pictureSize, deviceScaleFactor: 1});
+    await page.setViewport({width: canvasSize, height: canvasSize, deviceScaleFactor: 1});
     await page.goto(pageGotoFilePath);
 
     await page.setContent(html, {waitUntil: 'load'});
-    const buffer = await page.screenshot(isCompressPicture ? {
+    const canvas = await page.$('#colorGridCanvas');
+    const buffer = await canvas.screenshot(isCompressPicture ? {
       type: 'jpeg',
       quality: pictureQuality,
     } : {type: 'png'});
