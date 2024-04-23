@@ -24,13 +24,7 @@
 
 - `initialLevel`: 游戏的初始等级。默认值为 `2`。
 - `blockSize`: 每个颜色方块的大小（像素）。默认值为 `50`。
-- `diffPercentage`: 不同颜色方块的差异百分比。默认值为 `10`。
 - `isNumericGuessMiddlewareEnabled`: 是否启用数字猜测中间件。默认值为 `true`。
-
-### 新增配置项：
-
-- `diffMode`: 色块差异模式。可选值为 "变浅"、"变深"、"随机"。默认值为 "随机"。
-- `style`: 色块样式。可选值为 "1"、"2"、"3"、"4"、"随机"。默认值为 "随机"。
 
 ### 图片配置：
 
@@ -57,6 +51,7 @@
 * [Koishi](https://koishi.chat/) - 机器人框架
 * [longyong](https://forum.koishi.xyz/u/longyong/summary) - 提供动力
 * [yunzai · 闲心/xianxin-plugin](https://gitee.com/xianxincoder/xianxin-plugin/blob/master/apps/seecolor.js) - 提供参考
+* [koishi-plugin-color-bias](https://github.com/koishijs/koishi-plugin-color-bias/blob/main/src/state.ts) - 颜色差异代码参考，梦宝永远滴神！
 
 ## 🐱 QQ 群
 

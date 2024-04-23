@@ -1,6 +1,6 @@
 // noinspection CssInvalidPropertyValue
 
-import {Context, h, Schema} from 'koishi'
+import {Context, h, Random, Schema} from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import path from "path";
 
@@ -27,10 +27,8 @@ export const usage = `## 🎮 使用
 
 // pz* pzx*
 export interface Config {
-  diffMode: string
   blockSize: number
   initialLevel: number
-  diffPercentage: number
   pictureQuality: number
   isCompressPicture: boolean
   spacingBetweenGrids: number
@@ -42,8 +40,6 @@ export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     initialLevel: Schema.number().default(2).description('游戏的初始等级。'),
     blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）。'),
-    diffPercentage: Schema.number().default(10).description('不同颜色方块的差异百分比。'),
-    diffMode: Schema.union(['变浅', '变深', '随机']).default('随机').role('radio').description('色块差异模式。'),
     spacingBetweenGrids: Schema.number().default(10).description('色块之间的水平与垂直间距（像素）。'),
     isNumericGuessMiddlewareEnabled: Schema.boolean().default(true).description('是否启用数字猜测中间件。'),
     shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true).description('是否在触发后中断中间件链。'),
@@ -100,15 +96,15 @@ export function apply(ctx: Context, config: Config) {
   const pageGotoFilePath = 'file://' + filePath;
   // cl*
   const msg = {
-    start: `游戏开始啦！🎉`,
-    guess: `请发送类似 '行号 列号' 这样的坐标来找到不一样的色块吧~\n注意喔~数字之间需要存在一个空格！😉`,
-    guessRight: `恭喜你猜对了！👏你真厉害呀~😍`,
-    guessWrong: `猜错了哦~😅快再试一次吧！😊`,
-    continue: `让我们继续吧~这回看看你能猜出来嘛~😜`,
-    restarted: `游戏已重新开始~👍`,
-    stopped: `游戏停止了哦~😢\n让我们开始新的一轮游戏吧~😘`,
-    isStarted: '游戏已经开始了喔~😎',
-    isNotStarted: `游戏还没开始呢~😮\n快开始游戏吧~😁`
+    start: `🎉 猜色块游戏开启！`,
+    guess: `请输入 '行 列' 来揭示色块。\n例如: '3 1'。记得空格哦！😉`,
+    guessRight: `👏 猜中啦！你太棒了！😍`,
+    guessWrong: `哎呀，没猜中。再来一次吧！😊`,
+    continue: `继续游戏，看你的了！😜`,
+    restarted: `👍 游戏重置！`,
+    stopped: `😢 游戏暂停。\n新一轮，开始！😘`,
+    isStarted: `😎 游戏进行中...`,
+    isNotStarted: `😮 还没开始。\n让我们动起来！😁`
   }
   // tzb*
   ctx.database.extend('see_color_games', {
@@ -265,6 +261,45 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     })
 
   // hs*
+  function calculateLevel(n: number): number {
+    return Math.min(Math.max(Math.floor((n - 1) / 10) + 1, 1), 12);
+  }
+
+  function randomSign() {
+    return Random.int(2) * 2 - 1
+  }
+
+  function to256(scale: number) {
+    scale *= 256
+    return scale > 255 ? 'ff' : scale < 0 ? '00' : Math.floor(scale).toString(16).padStart(2, '0')
+  }
+
+  function createColor(r: number, g: number, b: number) {
+    return `#${to256(r)}${to256(g)}${to256(b)}`
+  }
+
+  function hsv(h: number, s: number = 1, v: number = 1) {
+    let c = v * s
+    const hh = h / 60
+    const m = v - c
+    const x = c * (1 - Math.abs(hh % 2 - 1)) + m
+    c = c + m
+    switch (Math.floor(hh)) {
+      case 0:
+        return createColor(c, x, m)
+      case 1:
+        return createColor(x, c, m)
+      case 2:
+        return createColor(m, c, x)
+      case 3:
+        return createColor(m, x, c)
+      case 4:
+        return createColor(x, m, c)
+      case 5:
+        return createColor(c, m, x)
+    }
+  }
+
   function isValidNumber(content: string, level: number): boolean {
     // 使用正则表达式检查字符串是否为一个合法的数字
     const isValidFormat = /^\d+(\.\d+)?$/.test(content);
@@ -410,23 +445,59 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
   async function generatePictureBuffer(n: number, channelId: string) {
     const {
       blockSize,
-      diffPercentage,
-      diffMode,
       isCompressPicture,
       pictureQuality,
       spacingBetweenGrids
     } = config;
 
     // 将基色和扩色声明为常量
-    const baseColor = randomColor();
-    const diffColor = adjustColor(baseColor, diffPercentage, diffMode);
+    // 使用Random库生成随机色相、饱和度和明度值
+    const h = Random.real(360) // 随机色相值，范围是0到360
+    const s = Random.real(0.2, 1) // 随机饱和度值，范围是0.2到1
+    const v = Random.real(0.2, 1) // 随机明度值，范围是0.2到1
+    const baseColor = hsv(h, s, v); // 使用这些值创建基础颜色
+
+    // 计算色相、饱和度和明度的变化因子
+    const factorH = Math.random() * 0.3 + 0.1
+    const residue = 1 - factorH
+    const factorS = Math.random() * residue * 0.6 + residue * 0.2
+    const factorV = residue - factorS // 明度变化因子
+
+    const level = calculateLevel(n); // 1~12
+    // 根据 level 计算色相、饱和度和明度的变化范围
+    const rangeH = 30 * Math.exp(-0.2 * level)
+    const rangeS = 0.5 * Math.exp(-0.1 * level)
+    const rangeV = 0.2 * Math.exp(-0.1 * level)
+
+    // 计算饱和度和明度的实际变化量
+    let deltaS = factorS * rangeS
+    if (deltaS + s > 1) {
+      deltaS *= -1
+    } else if (deltaS <= s) {
+      deltaS *= randomSign()
+    }
+    let deltaV = factorV * rangeV
+    if (deltaV + v > 1) {
+      deltaV *= -1
+    } else if (deltaV <= v) {
+      deltaV *= randomSign()
+    }
+
+    // 计算总的变化因子，并据此计算色相的变化量
+    const factor = s + v + deltaS / 2 + deltaV / 2
+    const deltaH = factorH * rangeH * randomSign() / factor
+    let biasedH = h + deltaH
+    if (biasedH < 0) biasedH += 360
+    else if (biasedH >= 360) biasedH -= 360
+
+    const diffColor = hsv(biasedH, s + deltaS, v + deltaV); // 生成新的颜色
+
 
     // 为不同的块(而不是行和列)生成随机索引
     const diffIndex = randomInt(0, n * n - 1);
     const {row, col} = getRowCol(n, diffIndex);
     const offset = blockSize;
     const canvasSize = n * blockSize + (n - 1) * spacingBetweenGrids + offset * 2;
-    // db*
     await ctx.database.set('see_color_games', {channelId: channelId}, {block: diffIndex + 1});
 
     let html: string = `
