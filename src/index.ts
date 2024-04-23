@@ -261,8 +261,13 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     })
 
   // hs*
-  function calculateLevel(n: number): number {
-    return Math.min(Math.max(Math.floor((n - 1) / 10) + 1, 1), 12);
+  function getLevel(n: number): number {
+    // 确定 level 的范围
+    const minLevel = 6;
+    const maxLevel = 12;
+    const range = maxLevel - minLevel + 1; // 7
+
+    return n % range + minLevel;
   }
 
   function randomSign() {
@@ -463,7 +468,7 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     const factorS = Math.random() * residue * 0.6 + residue * 0.2
     const factorV = residue - factorS // 明度变化因子
 
-    const level = calculateLevel(n); // 1~12
+    const level = getLevel(n); // 6 ~ 12
     // 根据 level 计算色相、饱和度和明度的变化范围
     const rangeH = 30 * Math.exp(-0.2 * level)
     const rangeS = 0.5 * Math.exp(-0.1 * level)
