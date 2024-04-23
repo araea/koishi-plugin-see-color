@@ -217,7 +217,7 @@ export function apply(ctx: Context, config: Config) {
         await updateRank(session.userId, session.username, playingRecord.score)
         // 继续游戏
         const buffer = await generatePictureBuffer(gameInfo.level + 1, session.channelId)
-        await session.send(`${h.at(session.userId)} ~\n${msg.guessRight}\n你获得了 ${gameInfo.level} 点积分喔~ 再接再厉喵~😊\n${h.image(buffer, `image/${config.isCompressPicture ? `jpeg` : `png`}`)}\n${msg.continue}`)
+        await session.send(`${h.at(session.userId)} ~\n${msg.guessRight}\n赢得 ${gameInfo.level} 点积分！再接再厉喵~😊\n${h.image(buffer, `image/${config.isCompressPicture ? `jpeg` : `png`}`)}\n${msg.continue}`)
         // 更新游戏状态
         await updateGameState(session.channelId, true, gameInfo.level + 1)
         return
@@ -234,7 +234,7 @@ export function apply(ctx: Context, config: Config) {
         await ctx.database.remove('see_color_playing_records', {channelId: session.channelId})
         await ctx.database.set('see_color_games', {channelId: session.channelId}, {isStarted: false})
         const {row, col} = getRowCol(gameInfo.level, gameInfo.block - 1);
-        await session.send(`${h.at(session.userId)} ~\n嘿嘿~🤭猜不出来吧~\n刚才的答案是块 ${gameInfo.block}（${row + 1} ${col + 1}） 喔~\n${msg.stopped}`)
+        await session.send(`${h.at(session.userId)} ~\n嘿嘿~🤭猜不出来吧~\n答案是块 ${gameInfo.block}（${row + 1} ${col + 1}） 喔~\n${msg.stopped}`)
       } else {
         return msg.isNotStarted
       }
