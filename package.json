@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-see-color",
   "description": "欢迎来到 找色块 小游戏，发现不同色块，挑战观察力，又名《给我点颜色看看》。",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [

@@ -32,6 +32,7 @@ export interface Config {
   pictureQuality: number
   isCompressPicture: boolean
   spacingBetweenGrids: number
+  blockGuessTimeLimitInSeconds: number
   isNumericGuessMiddlewareEnabled: boolean
   shouldInterruptMiddlewareChainAfterTriggered: boolean
 }
@@ -39,6 +40,7 @@ export interface Config {
 export const Config: Schema<Config> = Schema.intersect([
   Schema.object({
     initialLevel: Schema.number().default(2).description('游戏的初始等级。'),
+    blockGuessTimeLimitInSeconds: Schema.number().min(0).default(0).description('猜测色块的时间限制（秒），值为 0 时则不限制时间。'),
     blockSize: Schema.number().default(50).description('每个颜色方块的大小（像素）。'),
     spacingBetweenGrids: Schema.number().default(10).description('色块之间的水平与垂直间距（像素）。'),
     isNumericGuessMiddlewareEnabled: Schema.boolean().default(true).description('是否启用数字猜测中间件。'),
@@ -68,10 +70,11 @@ declare module 'koishi' {
 // jk*
 export interface SeeColorGame {
   id: number
-  channelId: string
-  isStarted: boolean
   level: number
   block: number
+  channelId: string
+  timestamp: string
+  isStarted: boolean
 }
 
 export interface SeeColorPlayingRecord {
@@ -97,7 +100,7 @@ export function apply(ctx: Context, config: Config) {
   // cl*
   const msg = {
     start: `🎉 猜色块游戏开启！`,
-    guess: `请输入 '行 列' 来揭示色块。\n例如: '3 1'。记得空格哦！😉`,
+    guess: `请输入 '行 列' 来揭示色块。\n例如: '2 1'。记得空格哦！😉`,
     guessRight: `👏 猜中啦！你太棒了！😍`,
     guessWrong: `哎呀，没猜中。再来一次吧！😊`,
     continue: `继续游戏，看你的了！😜`,
@@ -111,8 +114,9 @@ export function apply(ctx: Context, config: Config) {
     id: 'unsigned',
     channelId: 'string',
     isStarted: 'boolean',
-    level: 'integer',
-    block: 'integer',
+    level: 'unsigned',
+    block: 'unsigned',
+    timestamp: 'string',
   }, {
     primary: 'id',
     autoInc: true,
@@ -131,7 +135,7 @@ export function apply(ctx: Context, config: Config) {
     id: 'unsigned',
     userId: 'string',
     userName: 'string',
-    score: 'integer',
+    score: 'unsigned',
   }, {
     primary: 'id',
     autoInc: true,
@@ -174,7 +178,7 @@ export function apply(ctx: Context, config: Config) {
       const buffer = await generatePictureBuffer(config.initialLevel, session.channelId)
       await session.send(`${h.at(session.userId)} ~\n${msg.start}\n${h.image(buffer, `image/${config.isCompressPicture ? `jpeg` : `png`}`)}\n${msg.guess}`)
       // 更新游戏状态
-      await updateGameState(session.channelId, true, config.initialLevel)
+      await updateGameState(session.channelId, true, config.initialLevel, String(session.timestamp))
     })
   // c*
   ctx.command('seeColor.猜 <numberString:text>', '猜色块')
@@ -194,6 +198,14 @@ export function apply(ctx: Context, config: Config) {
 
       if (!gameInfo.isStarted) {
         return msg.isNotStarted
+      }
+
+      const lastTimestamp = Number(gameInfo.timestamp)
+      const timeDifference = calculateTimeDifference(lastTimestamp, session.timestamp)
+      if (timeDifference > config.blockGuessTimeLimitInSeconds && config.blockGuessTimeLimitInSeconds > 0) {
+        await session.send(`时间超过 ${config.blockGuessTimeLimitInSeconds} 秒！游戏结束！😢`)
+        await session.execute(`seeColor.结束`)
+        return
       }
 
       let number = 0;
@@ -219,7 +231,7 @@ export function apply(ctx: Context, config: Config) {
         const buffer = await generatePictureBuffer(gameInfo.level + 1, session.channelId)
         await session.send(`${h.at(session.userId)} ~\n${msg.guessRight}\n赢得 ${gameInfo.level} 点积分！再接再厉喵~😊\n${h.image(buffer, `image/${config.isCompressPicture ? `jpeg` : `png`}`)}\n${msg.continue}`)
         // 更新游戏状态
-        await updateGameState(session.channelId, true, gameInfo.level + 1)
+        await updateGameState(session.channelId, true, gameInfo.level + 1, String(session.timestamp))
         return
       } else {
         return msg.guessWrong
@@ -261,6 +273,10 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     })
 
   // hs*
+  function calculateTimeDifference(previousTimestamp: number, currentTimestamp: number): number {
+    return (currentTimestamp - previousTimestamp) / 1000;
+  }
+
   function getLevel(n: number): number {
     // 确定 level 的范围
     const minLevel = 6;
@@ -443,8 +459,12 @@ ${rankInfo.map((player, index) => ` ${String(index + 1).padStart(2, ' ')}   ${pl
     }
   }
 
-  async function updateGameState(channelId: string, isStarted: boolean, level: number) {
-    await ctx.database.set('see_color_games', {channelId: channelId}, {isStarted: isStarted, level: level})
+  async function updateGameState(channelId: string, isStarted: boolean, level: number, timestamp: string) {
+    await ctx.database.set('see_color_games', {channelId: channelId}, {
+      isStarted: isStarted,
+      level: level,
+      timestamp: timestamp
+    })
   }
 
   async function generatePictureBuffer(n: number, channelId: string) {
