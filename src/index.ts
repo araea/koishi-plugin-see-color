@@ -237,7 +237,8 @@ export function apply(ctx: Context, config: Config) {
       if (gameInfo.isStarted) {
         await ctx.database.remove('see_color_playing_records', {channelId: session.channelId})
         await ctx.database.set('see_color_games', {channelId: session.channelId}, {isStarted: false})
-        await session.send(`${h.at(session.userId)} ~\n嘿嘿~🤭猜不出来吧~\n刚才的答案是块 ${gameInfo.block} 喔~\n${msg.stopped}`)
+        const {row, col} = getRowCol(gameInfo.level, gameInfo.block - 1);
+        await session.send(`${h.at(session.userId)} ~\n嘿嘿~🤭猜不出来吧~\n刚才的答案是块 ${gameInfo.block}（${row + 1} ${col + 1}） 喔~\n${msg.stopped}`)
       } else {
         return msg.isNotStarted
       }
