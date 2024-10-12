@@ -1,5 +1,3 @@
-// noinspection CssInvalidPropertyValue
-
 import {Context, h, Random, Schema} from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import path from "path";
@@ -9,19 +7,12 @@ export const inject = {
   required: ['database', 'puppeteer'],
   // optional: ['markdownToImage'],
 }
-export const usage = `## 🎮 使用
+export const usage = `## 使用
 
-- 启动 \`puppeteer\` 服务插件。
-- 建议为各指令添加合适的指令别名。
+1. 启动 \`puppeteer\` 服务。
+2. 设置指令别名。
 
-## 📝 命令
-
-- \`seeColor.开始\`: 开始一个新的游戏。
-- \`seeColor.猜 <number>\`: 猜测不同颜色方块的序号。
-- \`seeColor.结束\`: 结束当前的游戏。
-- \`seeColor.排行榜\`: 查看玩家的排名，根据他们的分数。
-
-## 🐱 QQ 群
+## QQ 群
 
 -  956758505`
 
