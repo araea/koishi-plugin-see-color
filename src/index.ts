@@ -17,11 +17,11 @@ export const usage = `## 使用
 - 956758505`
 
 const MESSAGES = {
-  hint: '请发送 `行 列`（如 `2 1`）或块号来指认与众不同的色块。',
-  right: '👏 猜中啦！',
-  wrong: '差一点点，再看看？',
-  running: '本频道已经有一局在进行啦。',
-  idle: '还没有开始哦，先来一句 `seeColor.开始` 吧。',
+  hint: '请发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
+  right: '✅ 猜中了。',
+  wrong: '⚠️ 不对，再看看。',
+  running: '⚠️ 本频道已经有一局在进行。',
+  idle: '⚠️ 还没有开始，先发送「seeColor.开始」。',
 }
 
 export function apply(ctx: Context, config: Config) {
@@ -117,7 +117,7 @@ export function apply(ctx: Context, config: Config) {
       const limit = config.blockGuessTimeLimitInSeconds
       if (limit > 0 && session.timestamp - Number(game.timestamp) > limit * 1000) {
         await stop(session.channelId)
-        await send(session, `⏰ 超过 ${limit} 秒啦，本局结束。答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
+        await send(session, `⏳ 超过 ${limit} 秒，本局结束。答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
         return true
       }
       if (block !== game.block) {
@@ -157,7 +157,7 @@ export function apply(ctx: Context, config: Config) {
       try {
         await ctx.database.remove('see_color_playing_records', { channelId: session.channelId })
         const image = await deal(session, config.initialLevel)
-        await send(session, [h.at(session.userId), ' 🎉 猜色块开始！\n', image, `\n${MESSAGES.hint}`])
+        await send(session, [h.at(session.userId), ' ✅ 猜色块开始。\n', image, `\n${MESSAGES.hint}`])
       } finally {
         busy.delete(session.channelId)
       }
@@ -176,7 +176,7 @@ export function apply(ctx: Context, config: Config) {
       const game = await getGame(session.channelId)
       if (!game) return MESSAGES.idle
       await stop(session.channelId)
-      await send(session, `🤭 猜不出来吧～答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
+      await send(session, `✅ 本局结束。答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
     })
 
   cmd.subcommand('.排行榜 [count:posint]', '查看色榜')
@@ -186,7 +186,7 @@ export function apply(ctx: Context, config: Config) {
         .orderBy('score', 'desc')
         .limit(Math.min(count, 50))
         .execute()
-      if (!rank.length) return '色榜还空着，快去开一局吧～'
+      if (!rank.length) return '⚠️ 色榜还空着，先开一局吧。'
       return ['给我点颜色看看 · 色榜', ...rank.map((row, index) =>
         `${String(index + 1).padStart(2)}. ${row.userName} — ${row.score} 分`)].join('\n')
     })
