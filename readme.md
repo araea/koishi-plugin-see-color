@@ -1,10 +1,8 @@
 koishi-plugin-see-color
-========================
+=======================
 
 [<img alt="github" src="https://img.shields.io/badge/github-araea/see_color-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/araea/koishi-plugin-see-color)
 [<img alt="npm" src="https://img.shields.io/npm/v/koishi-plugin-see-color.svg?style=for-the-badge&color=fc8d62&logo=npm" height="20">](https://www.npmjs.com/package/koishi-plugin-see-color)
-
-## 介绍
 
 Koishi 的找色块游戏插件。找到不同的色块。
 
@@ -27,14 +25,14 @@ Koishi 的找色块游戏插件。找到不同的色块。
 
 ## 致谢
 
-* [Koishi](https://koishi.chat/) - 框架
-* [longyong](https://forum.koishi.xyz/u/longyong/summary) - 动力
-* [yunzai · 闲心/xianxin-plugin](https://gitee.com/xianxincoder/xianxin-plugin/blob/master/apps/seecolor.js) - 参考
-* [koishi-plugin-color-bias](https://github.com/koishijs/koishi-plugin-color-bias/blob/main/src/state.ts) - 颜色差异参考
+- [Koishi](https://koishi.chat/)
+- [longyong](https://forum.koishi.xyz/u/longyong/summary)
+- [yunzai · 闲心/xianxin-plugin](https://gitee.com/xianxincoder/xianxin-plugin/blob/master/apps/seecolor.js)
+- [koishi-plugin-color-bias](https://github.com/koishijs/koishi-plugin-color-bias/blob/main/src/state.ts)
 
 ## QQ 群
 
-* 956758505
+- 956758505
 
 <br>
 
