@@ -9,12 +9,17 @@ export const name = 'see-color'
 export const inject = ['database', 'puppeteer']
 export const usage = `## 使用
 
-1. 启动 \`puppeteer\` 服务。
-2. 用 \`seeColor.开始\` 开一局，直接发送 \`行 列\`（如 \`2 1\`）或块号即可猜测。
+\`seeColor.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对边长加一，猜错不扣分。
 
-## QQ 群
+## 指令
 
-- 956758505`
+| 指令 | 说明 |
+| --- | --- |
+| \`seeColor\` | 查看帮助 |
+| \`seeColor.开始\` | 开始一局 |
+| \`seeColor.猜 <行 列 \\| 块号>\` | 猜测 |
+| \`seeColor.结束\` | 结束并公布答案 |
+| \`seeColor.排行榜 [数量]\` | 排行榜 |`
 
 const MESSAGES = {
   hint: '请发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
