@@ -44,6 +44,6 @@
     "给我点颜色看看"
   ],
   "peerDependencies": {
-    "koishi": "^4.18.9"
+    "koishi": "^4.18.11"
   }
 }
