@@ -9,24 +9,24 @@ export const name = 'see-color'
 export const inject = ['database', 'puppeteer']
 export const usage = `## 使用
 
-\`seeColor.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对边长加一，猜错不扣分。
+\`color.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对边长加一，猜错不扣分。
 
 ## 指令
 
 | 指令 | 说明 |
 | --- | --- |
-| \`seeColor\` | 查看帮助 |
-| \`seeColor.开始\` | 开始一局 |
-| \`seeColor.猜 <行 列 \\| 块号>\` | 猜测 |
-| \`seeColor.结束\` | 结束并公布答案 |
-| \`seeColor.排行榜 [数量]\` | 排行榜 |`
+| \`color\` | 查看帮助 |
+| \`color.开始\` | 开始一局 |
+| \`color.猜 <行 列 \\| 块号>\` | 猜测 |
+| \`color.结束\` | 结束并公布答案 |
+| \`color.排行榜 [数量]\` | 排行榜 |`
 
 const MESSAGES = {
   hint: '请发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
   right: '✅ 猜中了。',
   wrong: '⚠️ 不对，再看看。',
   running: '⚠️ 本频道已经有一局在进行。',
-  idle: '⚠️ 还没有开始，先发送「seeColor.开始」。',
+  idle: '⚠️ 还没有开始，先发送「color.开始」。',
 }
 
 export function apply(ctx: Context, config: Config) {
@@ -151,8 +151,9 @@ export function apply(ctx: Context, config: Config) {
     if (!config.shouldInterruptMiddlewareChainAfterTriggered) return next()
   })
 
-  const cmd = ctx.command('seeColor', '给我点颜色看看')
-    .action(({ session }) => session.execute('help seeColor'))
+  const cmd = ctx.command('color', '给我点颜色看看')
+    .alias('seeColor')
+    .action(({ session }) => session.execute('help color'))
 
   cmd.subcommand('.开始', '开始一局')
     .action(async ({ session }) => {
@@ -170,7 +171,7 @@ export function apply(ctx: Context, config: Config) {
 
   cmd.subcommand('.猜 <input:text>', '猜一次色块')
     .usage('参数为 `行 列`（如 `2 1`）或块号。')
-    .example('seeColor.猜 2 1')
+    .example('color.猜 2 1')
     .action(async ({ session }, input) => {
       if (!await getGame(session.channelId)) return MESSAGES.idle
       if (!await guess(session, input ?? '')) return MESSAGES.hint
