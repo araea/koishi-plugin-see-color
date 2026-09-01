@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-see-color",
-  "description": "Koishi 的找色块游戏插件。在一片同色方格里找出唯一的异色块。",
+  "description": "Koishi 的找色块游戏插件。",
   "version": "1.4.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
