@@ -9,17 +9,17 @@ export const name = 'see-color'
 export const inject = ['database', 'puppeteer']
 export const usage = `## 使用
 
-\`color.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对边长加一，猜错不扣分。
+\`color.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对后色块边长增加，猜错不扣分。
 
 ## 指令
 
 | 指令 | 说明 |
 | --- | --- |
-| \`color\` | 查看帮助 |
+| \`color\` | 帮助 |
 | \`color.开始\` | 开始一局 |
 | \`color.猜 <行 列 \\| 块号>\` | 猜测 |
 | \`color.结束\` | 结束并公布答案 |
-| \`color.排行榜 [数量]\` | 排行榜 |`
+| \`color.排行榜 [数量]\` | 排行 |`
 
 const MESSAGES = {
   hint: '请发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
