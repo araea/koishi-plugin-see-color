@@ -7,8 +7,6 @@ export interface Config {
   spacingBetweenGrids: number
   isNumericGuessMiddlewareEnabled: boolean
   shouldInterruptMiddlewareChainAfterTriggered: boolean
-  isCompressPicture: boolean
-  pictureQuality?: number
   enableAutoRecall: boolean
   autoRecallDelay?: number
 }
@@ -28,21 +26,6 @@ export const Config: Schema<Config> = Schema.intersect([
     shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true)
       .description('上述猜测触发后中断中间件链，避免被其他插件重复处理。'),
   }).description('基础配置'),
-
-  Schema.intersect([
-    Schema.object({
-      isCompressPicture: Schema.boolean().default(false)
-        .description('以 JPEG 输出，牺牲画质换取更小的体积（不建议，色差游戏对画质敏感）。'),
-    }),
-    Schema.union([
-      Schema.object({
-        isCompressPicture: Schema.const(true).required(),
-        pictureQuality: Schema.natural().min(1).max(100).default(80)
-          .description('JPEG 质量（1 ~ 100）。'),
-      }),
-      Schema.object({}),
-    ]),
-  ]).description('图片配置'),
 
   Schema.intersect([
     Schema.object({

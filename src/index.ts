@@ -35,7 +35,8 @@ export function apply(ctx: Context, config: Config) {
 
   // 同频道内串行处理，避免两条消息同时猜中导致重复计分
   const busy = new Set<string>()
-  const mime = `image/${config.isCompressPicture ? 'jpeg' : 'png'}`
+  // 与 renderGrid 保持一致：固定 PNG，避免有损压缩造成色差
+  const mime = 'image/png'
 
   async function send(session: Session, content: h.Fragment) {
     const ids = await session.send(content)

@@ -75,16 +75,18 @@ function html(config: Config, n: number, diffIndex: number) {
 </style><main>${cells.join('')}${labels.join('')}</main>` }
 }
 
-/** 渲染一张网格图，其中第 `diffIndex` 块（从 0 开始）与众不同。 */
+/**
+ * 渲染一张网格图，其中第 `diffIndex` 块（从 0 开始）与众不同。
+ *
+ * 固定输出 PNG：色差游戏的推进依赖颜色准确，JPEG 的有损压缩会让色块失真。
+ */
 export async function renderGrid(ctx: Context, config: Config, n: number, diffIndex: number) {
   const { size, source } = html(config, n, diffIndex)
   const page = await ctx.puppeteer.page()
   try {
     await page.setViewport({ width: size, height: size, deviceScaleFactor: 1 })
     await page.setContent(source)
-    return await (await page.$('main')).screenshot(config.isCompressPicture
-      ? { type: 'jpeg', quality: config.pictureQuality ?? 80 }
-      : { type: 'png' })
+    return await (await page.$('main')).screenshot({ type: 'png' })
   } finally {
     await page.close()
   }
