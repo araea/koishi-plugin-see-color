@@ -1,6 +1,13 @@
 import { Context, Random } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import type { Config } from './config'
+import { baseline, scheme, SHAPE } from './m3'
+
+/*
+ * 这张图的主体是待辨认的色块，任何主题色叠上去都会干扰判断，
+ * 所以设计系统只管外围：底色、行列号的字阶与留白。色块本身一律不碰。
+ */
+const SCHEME = scheme(210)
 
 /** 把 0 ~ 1 的分量转成两位十六进制。 */
 function channel(scale: number) {
@@ -61,17 +68,27 @@ function html(config: Config, n: number, diffIndex: number) {
   const size = n * blockSize + (n - 1) * gap + margin * 2
   const at = (i: number) => i * (blockSize + gap) + margin
 
+  // 圆角按块大小走形状刻度：小块用 small，大块最多到 large，
+  // 再大就会啃掉可辨认的色面
+  const radius = Math.min(SHAPE.large, Math.max(SHAPE.small, Math.round(blockSize * 0.18)))
+  const label = Math.max(12, Math.round(blockSize * 0.42))
+
   const cells = Array.from({ length: n * n }, (_, i) =>
     `<i style="left:${at(i % n)}px;top:${at((i / n) | 0)}px;background:${i === diffIndex ? diff : base}"></i>`)
   const labels = Array.from({ length: n }, (_, i) =>
     `<b style="left:${at(i)}px;top:0">${i + 1}</b><b style="left:0;top:${at(i)}px">${i + 1}</b>`)
 
   return { size, source: `<style>
-  *{margin:0;box-sizing:border-box}
-  body{background:#fff}
-  main{position:relative;width:${size}px;height:${size}px}
+  ${baseline(SCHEME)}
+  main{position:relative;width:${size}px;height:${size}px;background:var(--md-sys-color-surface)}
   i,b{position:absolute;display:block;width:${blockSize}px;height:${blockSize}px}
-  b{color:#333;font:${Math.max(12, Math.round(blockSize * 0.6))}px/${blockSize}px system-ui,sans-serif;text-align:center}
+  i{border-radius:${radius}px}
+  b{
+    display:flex;align-items:center;justify-content:center;
+    color:var(--md-sys-color-on-surface-variant);
+    font-size:${label}px;font-weight:600;letter-spacing:.5px;
+    font-variant-numeric:tabular-nums;
+  }
 </style><main>${cells.join('')}${labels.join('')}</main>` }
 }
 
