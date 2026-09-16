@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-see-color",
-  "description": "Koishi 的找色块游戏插件。",
-  "version": "2.1.0",
+  "description": "Koishi 插件 · 给我点颜色看看。",
+  "version": "2.1.1",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
@@ -10,9 +10,6 @@
     "LICENSE-MIT"
   ],
   "koishi": {
-    "description": {
-      "zh": "Koishi 的找色块游戏插件。在一片同色方格里找出唯一的异色块。"
-    },
     "service": {
       "required": [
         "database",
