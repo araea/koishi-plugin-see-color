@@ -1,13 +1,24 @@
 import { Context, Random } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import type { Config } from './config'
-import { baseline, scheme, SHAPE } from './m3'
+import { baseline, components, EMPHASIZED_WEIGHT, MONO_STACK, scheme, SHAPE, TYPE } from './m3'
 
 /*
  * 这张图的主体是待辨认的色块，任何主题色叠上去都会干扰判断，
  * 所以设计系统只管外围：底色、行列号的字阶与留白。色块本身一律不碰。
  */
 const SCHEME = scheme(210)
+
+/** 圆角梯子，由小到大。名字写成变量后缀形式，与 systemVars() 的 kebab 命名一致。 */
+const CORNERS = [['small', SHAPE.small], ['medium', SHAPE.medium], ['large', SHAPE.large]] as const
+
+/** 字阶梯子：十五档去重后由小到大。 */
+const TYPE_SIZES = [...new Set(Object.values(TYPE).map((step) => step.size))].sort((a, b) => a - b)
+
+/** 从刻度里取离 `value` 最近的一档；两档等距时取小的那一档。 */
+function nearest<T>(steps: readonly T[], value: number, at: (step: T) => number) {
+  return steps.reduce((best, step) => Math.abs(at(step) - value) < Math.abs(at(best) - value) ? step : best)
+}
 
 /** 把 0 ~ 1 的分量转成两位十六进制。 */
 function channel(scale: number) {
@@ -70,8 +81,9 @@ function html(config: Config, n: number, diffIndex: number) {
 
   // 圆角按块大小走形状刻度：小块用 small，大块最多到 large，
   // 再大就会啃掉可辨认的色面
-  const radius = Math.min(SHAPE.large, Math.max(SHAPE.small, Math.round(blockSize * 0.18)))
-  const label = Math.max(12, Math.round(blockSize * 0.42))
+  const corner = nearest(CORNERS, blockSize * 0.18, (step) => step[1])[0]
+  // 行列号是次级标签：字号取字阶上最近的一档，字重与字距取 label 档
+  const labelSize = nearest(TYPE_SIZES, Math.max(TYPE.labelMedium.size, blockSize * 0.42), (step) => step)
 
   const cells = Array.from({ length: n * n }, (_, i) =>
     `<i style="left:${at(i % n)}px;top:${at((i / n) | 0)}px;background:${i === diffIndex ? diff : base}"></i>`)
@@ -79,17 +91,18 @@ function html(config: Config, n: number, diffIndex: number) {
     `<b style="left:${at(i)}px;top:0">${i + 1}</b><b style="left:0;top:${at(i)}px">${i + 1}</b>`)
 
   return { size, source: `<style>
-  ${baseline(SCHEME)}
-  main{position:relative;width:${size}px;height:${size}px;background:var(--md-sys-color-surface)}
+  ${baseline(SCHEME)}${components()}
+  main{position:relative;width:${size}px;height:${size}px}
   i,b{position:absolute;display:block;width:${blockSize}px;height:${blockSize}px}
-  i{border-radius:${radius}px}
+  i{border-radius:var(--md-sys-shape-corner-${corner})}
   b{
     display:flex;align-items:center;justify-content:center;
     color:var(--md-sys-color-on-surface-variant);
-    font-size:${label}px;font-weight:600;letter-spacing:.5px;
+    font-family:${MONO_STACK};
+    font-size:${labelSize}px;font-weight:${EMPHASIZED_WEIGHT.label};letter-spacing:${TYPE.labelMedium.tracking}px;
     font-variant-numeric:tabular-nums;
   }
-</style><main>${cells.join('')}${labels.join('')}</main>` }
+</style><main class="m3-surface">${cells.join('')}${labels.join('')}</main>` }
 }
 
 /**

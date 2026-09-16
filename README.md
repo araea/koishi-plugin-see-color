@@ -18,7 +18,7 @@ yarn add koishi-plugin-see-color
 | `color.开始` | 开始一局 |
 | `color.猜 <行 列 或 块号>` | 猜测色块 |
 | `color.结束` | 结束并公布答案 |
-| `color.排行榜 [数量]` | 排行 |
+| `color.排行榜 [数量]` | 查看积分排行榜 |
 
 猜对后色块边长增加，猜错不扣分。
 

@@ -17,6 +17,8 @@ export interface SeeColorGame {
   block: number
   /** 上一次出题的时间戳，用于限时判定。 */
   timestamp: string
+  /** 发起本局的人；结束他人发起的对局要卡在这里。 */
+  initiatorId: string
 }
 
 /** 本局内某人的累计得分，游戏结束时清空。 */
@@ -46,6 +48,7 @@ export function defineTables(ctx: Context) {
     level: 'unsigned',
     block: 'unsigned',
     timestamp: 'string',
+    initiatorId: 'string',
   }, key)
 
   ctx.model.extend('see_color_playing_records', {

@@ -25,8 +25,10 @@ const MESSAGES = {
   hint: '发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
   right: '✅ 猜中了。',
   wrong: '💡 不是这一块，再看看。',
-  running: '⚠️ 本频道已经有一局在进行。\n发送「color.结束」收掉这一局，再开新的。',
-  idle: '💡 还没有开始。\n发送「color.开始」开一局。',
+  running: '⚠️ 本频道已经有一局在进行\n发送「color.结束」收掉这一局，再开新的。',
+  idle: '💡 还没有开始\n本频道当前没有进行中的对局。\n发送「color.开始」开一局。',
+  busy: '⏳ 上一步还在处理，稍等一下。',
+  renderFailed: '❌ 图片没能生成\n这一局先作罢，发送「color.开始」再试一次。',
 }
 
 export function apply(ctx: Context, config: Config) {
@@ -66,16 +68,22 @@ export function apply(ctx: Context, config: Config) {
     return game?.isStarted ? game : undefined
   }
 
-  /** 出下一题：随机挑一块作为答案，落库后返回图片。 */
+  /** 出下一题：随机挑一块作为答案，落库后返回图片；出图失败时返回 null。 */
   async function deal(session: Session, level: number) {
     const block = Random.int(1, level * level + 1)
-    const image = await renderGrid(ctx, config, level, block - 1)
+    let image: h.Fragment
+    try {
+      image = h.image(await renderGrid(ctx, config, level, block - 1), mime)
+    } catch (error) {
+      logger.warn('出图失败：%s', error.message)
+      return null
+    }
     const { channelId } = session
     const state = { isStarted: true, level, block, timestamp: String(session.timestamp) }
     const [existing] = await ctx.database.get('see_color_games', { channelId }, ['id'])
     if (existing) await ctx.database.set('see_color_games', { channelId }, state)
     else await ctx.database.create('see_color_games', { channelId, ...state })
-    return h.image(image, mime)
+    return image
   }
 
   /** 把块号换算成人类可读的「第 R 行 第 C 列」。 */
@@ -127,7 +135,10 @@ export function apply(ctx: Context, config: Config) {
     if (!game) return false
     const block = parse(input, game.level)
     if (!block) return false
-    if (busy.has(session.channelId)) return true
+    if (busy.has(session.channelId)) {
+      await send(session, MESSAGES.busy)
+      return true
+    }
     busy.add(session.channelId)
     try {
       const limit = config.blockGuessTimeLimitInSeconds
@@ -140,8 +151,13 @@ export function apply(ctx: Context, config: Config) {
         await send(session, MESSAGES.wrong)
         return true
       }
-      const score = await addScore(session, game.level)
       const image = await deal(session, game.level + 1)
+      if (!image) {
+        await stop(session.channelId)
+        await send(session, MESSAGES.renderFailed)
+        return true
+      }
+      const score = await addScore(session, game.level)
       await send(session, [
         h.at(session.userId),
         ` ${MESSAGES.right}本题 +${game.level} 分，累计 ${score} 分。\n`,
@@ -169,12 +185,15 @@ export function apply(ctx: Context, config: Config) {
   cmd.subcommand('.开始', '开始一局')
     .action(async ({ session }) => {
       if (await getGame(session.channelId)) return MESSAGES.running
-      if (busy.has(session.channelId)) return
+      if (busy.has(session.channelId)) return send(session, MESSAGES.busy)
       busy.add(session.channelId)
       try {
         await ctx.database.remove('see_color_playing_records', { channelId: session.channelId })
         const image = await deal(session, config.initialLevel)
-        await send(session, [h.at(session.userId), ' ✅ 猜色块开始。\n', image, `\n${MESSAGES.hint}`])
+        if (!image) return MESSAGES.renderFailed
+        // 记下发起者：.结束 只放行发起者与权限 2 以上的人
+        await ctx.database.set('see_color_games', { channelId: session.channelId }, { initiatorId: session.userId })
+        await send(session, [h.at(session.userId), ' ✅ 猜色块开始\n', image, `\n${MESSAGES.hint}`])
       } finally {
         busy.delete(session.channelId)
       }
@@ -189,11 +208,22 @@ export function apply(ctx: Context, config: Config) {
     })
 
   cmd.subcommand('.结束', '结束本局并公布答案')
+    .userFields(['id', 'name', 'authority'])
     .action(async ({ session }) => {
       const game = await getGame(session.channelId)
       if (!game) return MESSAGES.idle
-      await stop(session.channelId)
-      await send(session, `✅ 本局结束\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
+      // 破坏性操作：只放行本局发起者，其余人要权限 2
+      if (game.initiatorId && session.userId !== game.initiatorId && (session.user?.authority ?? 0) < 2) {
+        return '⚠️ 权限不够\n只有发起者或权限 2 以上的人能结束这一局。'
+      }
+      if (busy.has(session.channelId)) return send(session, MESSAGES.busy)
+      busy.add(session.channelId)
+      try {
+        await stop(session.channelId)
+        await send(session, `✅ 本局结束\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
+      } finally {
+        busy.delete(session.channelId)
+      }
     })
 
   cmd.subcommand('.排行榜 [count:posint]', '查看积分排行榜')
@@ -204,7 +234,11 @@ export function apply(ctx: Context, config: Config) {
         .limit(Math.min(count, 50))
         .execute()
       if (!rank.length) return '📋 排行榜还空着\n第一个猜中色块的人，名字会写在这里。\n发送「color.开始」开一局。'
-      return ['📋 猜色块排行榜', ...rank.map((row, index) =>
-        `${String(index + 1).padStart(2)}. ${row.userName} · ${row.score} 分`)].join('\n')
+      // 整条消息五行封顶：标题一行，内容最多四行，更多时压到三行并留一行尾注
+      const shown = rank.length > 4 ? rank.slice(0, 3) : rank
+      const hidden = rank.length - shown.length
+      return ['📋 猜色块排行榜', ...shown.map((row, index) =>
+        `${String(index + 1).padStart(2)}. ${row.userName} · ${row.score} 分`),
+        hidden > 0 ? `…… 另有 ${hidden} 人在榜` : null].filter(Boolean).join('\n')
     })
 }
