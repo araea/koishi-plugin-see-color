@@ -19,14 +19,14 @@ export const usage = `## 使用
 | \`color.开始\` | 开始一局 |
 | \`color.猜 <行 列 \\| 块号>\` | 猜测 |
 | \`color.结束\` | 结束并公布答案 |
-| \`color.排行榜 [数量]\` | 排行 |`
+| \`color.排行榜 [数量]\` | 积分排行榜 |`
 
 const MESSAGES = {
-  hint: '请发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
+  hint: '发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
   right: '✅ 猜中了。',
-  wrong: '⚠️ 不对，再看看。',
-  running: '⚠️ 本频道已经有一局在进行。',
-  idle: '⚠️ 还没有开始，先发送「color.开始」。',
+  wrong: '💡 不是这一块，再看看。',
+  running: '⚠️ 本频道已经有一局在进行。\n发送「color.结束」收掉这一局，再开新的。',
+  idle: '💡 还没有开始。\n发送「color.开始」开一局。',
 }
 
 export function apply(ctx: Context, config: Config) {
@@ -123,7 +123,7 @@ export function apply(ctx: Context, config: Config) {
       const limit = config.blockGuessTimeLimitInSeconds
       if (limit > 0 && session.timestamp - Number(game.timestamp) > limit * 1000) {
         await stop(session.channelId)
-        await send(session, `⏳ 超过 ${limit} 秒，本局结束。答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
+        await send(session, `⏳ 超过 ${limit} 秒，本局结束。\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
         return true
       }
       if (block !== game.block) {
@@ -183,18 +183,18 @@ export function apply(ctx: Context, config: Config) {
       const game = await getGame(session.channelId)
       if (!game) return MESSAGES.idle
       await stop(session.channelId)
-      await send(session, `✅ 本局结束。答案是块 ${game.block}（${locate(game.level, game.block)}）。`)
+      await send(session, `✅ 本局结束。\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
     })
 
-  cmd.subcommand('.排行榜 [count:posint]', '查看色榜')
+  cmd.subcommand('.排行榜 [count:posint]', '查看积分排行榜')
     .action(async (_, count = 10) => {
       const rank = await ctx.database
         .select('see_color_rank')
         .orderBy('score', 'desc')
         .limit(Math.min(count, 50))
         .execute()
-      if (!rank.length) return '⚠️ 色榜还空着，先开一局吧。'
-      return ['给我点颜色看看 · 色榜', ...rank.map((row, index) =>
+      if (!rank.length) return '📋 排行榜还空着\n第一个猜中色块的人，名字会写在这里。\n发送「color.开始」开一局。'
+      return ['📋 猜色块排行榜', ...rank.map((row, index) =>
         `${String(index + 1).padStart(2)}. ${row.userName} — ${row.score} 分`)].join('\n')
     })
 }
