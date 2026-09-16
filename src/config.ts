@@ -5,10 +5,9 @@ export interface Config {
   blockGuessTimeLimitInSeconds: number
   blockSize: number
   spacingBetweenGrids: number
-  isNumericGuessMiddlewareEnabled: boolean
+  enableDirectInput: boolean
   shouldInterruptMiddlewareChainAfterTriggered: boolean
-  enableAutoRecall: boolean
-  autoRecallDelay?: number
+  retractDelay: number
 }
 
 export const Config: Schema<Config> = Schema.intersect([
@@ -21,24 +20,14 @@ export const Config: Schema<Config> = Schema.intersect([
       .description('每个色块的边长（像素）。'),
     spacingBetweenGrids: Schema.natural().default(10)
       .description('色块之间的间距（像素）。'),
-    isNumericGuessMiddlewareEnabled: Schema.boolean().default(true)
-      .description('游戏中直接发送 `行 列` 或块号即可猜测，无需输入指令。'),
+    enableDirectInput: Schema.boolean().default(true)
+      .description('对局中直接发送 `行 列` 或块号即可猜测，无需指令前缀。'),
     shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true)
       .description('上述猜测触发后中断中间件链，避免被其他插件重复处理。'),
   }).description('基础配置'),
 
-  Schema.intersect([
-    Schema.object({
-      enableAutoRecall: Schema.boolean().default(false)
-        .description('一段时间后自动撤回本插件发出的消息。'),
-    }),
-    Schema.union([
-      Schema.object({
-        enableAutoRecall: Schema.const(true).required(),
-        autoRecallDelay: Schema.natural().min(1).default(60)
-          .description('撤回延迟（秒）。需要机器人拥有撤回权限。'),
-      }),
-      Schema.object({}),
-    ]),
-  ]).description('自动撤回配置'),
+  Schema.object({
+    retractDelay: Schema.natural().default(0)
+      .description('自动撤回延迟（秒），0 表示不撤回。'),
+  }).description('消息发送设置'),
 ]) as Schema<Config>

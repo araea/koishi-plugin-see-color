@@ -38,15 +38,25 @@ export function apply(ctx: Context, config: Config) {
   // 与 renderGrid 保持一致：固定 PNG，避免有损压缩造成色差
   const mime = 'image/png'
 
+  // 自动撤回：同一频道只保留最新一条，上一条延时撤回。
+  const lastMessage = new Map<string, { id: string; timestamp: number }>()
+
   async function send(session: Session, content: h.Fragment) {
     const ids = await session.send(content)
-    if (!config.enableAutoRecall) return ids
-    ctx.setTimeout(() => {
-      for (const id of ids) {
-        session.bot.deleteMessage(session.channelId, id)
-          .catch((error) => logger.warn('撤回消息 %s 失败：%s', id, error.message))
+    const messageId = ids[0]
+    if (!config.retractDelay || !messageId) return ids
+    const previous = lastMessage.get(session.channelId)
+    if (previous) {
+      const passed = Date.now() - previous.timestamp
+      // 超过两分钟的消息撤不回来，留 2 秒余量。
+      if (passed < 118000) {
+        ctx.setTimeout(() => {
+          session.bot.deleteMessage(session.channelId, previous.id)
+            .catch((error) => logger.debug('撤回消息 %s 失败：%s', previous.id, error.message))
+        }, Math.max(0, config.retractDelay * 1000 - passed))
       }
-    }, (config.autoRecallDelay ?? 60) * 1000)
+    }
+    lastMessage.set(session.channelId, { id: messageId, timestamp: Date.now() })
     return ids
   }
 
@@ -123,7 +133,7 @@ export function apply(ctx: Context, config: Config) {
       const limit = config.blockGuessTimeLimitInSeconds
       if (limit > 0 && session.timestamp - Number(game.timestamp) > limit * 1000) {
         await stop(session.channelId)
-        await send(session, `⏳ 超过 ${limit} 秒，本局结束。\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
+        await send(session, `⏳ 超过 ${limit} 秒，本局结束\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
         return true
       }
       if (block !== game.block) {
@@ -146,7 +156,7 @@ export function apply(ctx: Context, config: Config) {
 
   // 游戏进行中时，直接发数字即可猜测，无需输入指令
   ctx.middleware(async (session, next) => {
-    if (!config.isNumericGuessMiddlewareEnabled) return next()
+    if (!config.enableDirectInput) return next()
     if (!/^\d+(\s+\d+)?$/.test(session.content.trim())) return next()
     if (!await guess(session, session.content)) return next()
     if (!config.shouldInterruptMiddlewareChainAfterTriggered) return next()
@@ -183,7 +193,7 @@ export function apply(ctx: Context, config: Config) {
       const game = await getGame(session.channelId)
       if (!game) return MESSAGES.idle
       await stop(session.channelId)
-      await send(session, `✅ 本局结束。\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
+      await send(session, `✅ 本局结束\n答案是块 ${game.block}（${locate(game.level, game.block)}）。\n发送「color.开始」再来一局。`)
     })
 
   cmd.subcommand('.排行榜 [count:posint]', '查看积分排行榜')
@@ -195,6 +205,6 @@ export function apply(ctx: Context, config: Config) {
         .execute()
       if (!rank.length) return '📋 排行榜还空着\n第一个猜中色块的人，名字会写在这里。\n发送「color.开始」开一局。'
       return ['📋 猜色块排行榜', ...rank.map((row, index) =>
-        `${String(index + 1).padStart(2)}. ${row.userName} — ${row.score} 分`)].join('\n')
+        `${String(index + 1).padStart(2)}. ${row.userName} · ${row.score} 分`)].join('\n')
     })
 }
