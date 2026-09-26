@@ -1,3 +1,5 @@
+import { registerDirectInput, directInputConflict } from './ux'
+import { usePresentation } from './ux'
 import { Context, h, Random, Session } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import { Config } from './config'
@@ -32,6 +34,7 @@ const MESSAGES = {
 }
 
 export function apply(ctx: Context, config: Config) {
+  const presentation = usePresentation(ctx, 'color')
   const logger = ctx.logger(name)
   defineTables(ctx)
 
@@ -46,7 +49,7 @@ export function apply(ctx: Context, config: Config) {
   async function send(session: Session, content: h.Fragment) {
     const ids = await session.send(content)
     const messageId = ids[0]
-    if (!config.retractDelay || !messageId) return ids
+    if (presentation.textOnly(session) || !config.retractDelay || !messageId) return ids
     const previous = lastMessage.get(session.channelId)
     if (previous) {
       const passed = Date.now() - previous.timestamp
@@ -83,7 +86,7 @@ export function apply(ctx: Context, config: Config) {
     const [existing] = await ctx.database.get('see_color_games', { channelId }, ['id'])
     if (existing) await ctx.database.set('see_color_games', { channelId }, state)
     else await ctx.database.create('see_color_games', { channelId, ...state })
-    return image
+    return h('p', {}, [...h.normalize(image), h('p', {}, `色差辨认题：${level} 行 ${level} 列，块号按从左到右、从上到下排列。发送「color.猜 行 列」或「color.猜 块号」。此题以辨认颜色为目的。`)])
   }
 
   /** 把块号换算成人类可读的「第 R 行 第 C 列」。 */
@@ -171,9 +174,18 @@ export function apply(ctx: Context, config: Config) {
   }
 
   // 游戏进行中时，直接发数字即可猜测，无需输入指令
+  registerDirectInput(ctx, 'see-color', async (session) => {
+    if (!ctx.filter(session)) return false;
+    if (!config.enableDirectInput) return false
+    if (!/^\d+(\s+\d+)?$/.test(session.content.trim())) return false
+    const game = await getGame(session.channelId)
+    return Boolean(game && parse(session.content, game.level))
+  });
+
   ctx.middleware(async (session, next) => {
     if (!config.enableDirectInput) return next()
     if (!/^\d+(\s+\d+)?$/.test(session.content.trim())) return next()
+    if (await directInputConflict(ctx, session)) return;
     if (!await guess(session, session.content)) return next()
     if (!config.shouldInterruptMiddlewareChainAfterTriggered) return next()
   })
@@ -235,7 +247,7 @@ export function apply(ctx: Context, config: Config) {
         .execute()
       if (!rank.length) return '📋 排行榜还空着\n第一个猜中色块的人，名字会写在这里。\n发送「color.开始」开一局。'
       // 整条消息五行封顶：标题一行，内容最多四行，更多时压到三行并留一行尾注
-      const shown = rank.length > 4 ? rank.slice(0, 3) : rank
+      const shown = rank
       const hidden = rank.length - shown.length
       return ['📋 猜色块排行榜', ...shown.map((row, index) =>
         `${String(index + 1).padStart(2)}. ${row.userName} · ${row.score} 分`),
