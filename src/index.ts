@@ -1,5 +1,5 @@
 import { registerDirectInput, directInputConflict } from './ux'
-import { usePresentation } from './ux'
+import { usePresentation, choosePresentation, imageText } from './ux'
 import { Context, h, Random, Session } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import { Config } from './config'
@@ -47,7 +47,7 @@ export function apply(ctx: Context, config: Config) {
   const lastMessage = new Map<string, { id: string; timestamp: number }>()
 
   async function send(session: Session, content: h.Fragment) {
-    const ids = await session.send(content)
+    const ids = await session.send(choosePresentation(content, presentation.textOnly(session)))
     const messageId = ids[0]
     if (presentation.textOnly(session) || !config.retractDelay || !messageId) return ids
     const previous = lastMessage.get(session.channelId)
@@ -86,7 +86,7 @@ export function apply(ctx: Context, config: Config) {
     const [existing] = await ctx.database.get('see_color_games', { channelId }, ['id'])
     if (existing) await ctx.database.set('see_color_games', { channelId }, state)
     else await ctx.database.create('see_color_games', { channelId, ...state })
-    return h('p', {}, [...h.normalize(image), h('p', {}, `色差辨认题：${level} 行 ${level} 列，块号按从左到右、从上到下排列。发送「color.猜 行 列」或「color.猜 块号」。此题以辨认颜色为目的。`)])
+    return h('p', {}, [...h.normalize(image), imageText(`色差辨认题：${level} 行 ${level} 列，块号按从左到右、从上到下排列。发送「color.猜 行 列」或「color.猜 块号」。此题以辨认颜色为目的。`)])
   }
 
   /** 把块号换算成人类可读的「第 R 行 第 C 列」。 */
