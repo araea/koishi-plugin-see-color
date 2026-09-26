@@ -21,7 +21,7 @@ export const Config: Schema<Config> = Schema.intersect([
     spacingBetweenGrids: Schema.natural().default(10)
       .description('色块之间的间距（像素）。'),
     enableDirectInput: Schema.boolean().default(true)
-      .description('对局中直接发送 `行 列` 或块号即可猜测，无需指令前缀。'),
+      .description('对局中直接发送 `行 列` 即可猜测，无需指令前缀。单独的块号只在 `color.猜` 里接受，免得误触日常聊天。'),
     shouldInterruptMiddlewareChainAfterTriggered: Schema.boolean().default(true)
       .description('上述猜测触发后中断中间件链，避免被其他插件重复处理。'),
   }).description('基础配置'),

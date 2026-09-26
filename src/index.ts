@@ -1,5 +1,4 @@
 import { registerDirectInput, directInputConflict } from './ux'
-import { usePresentation, choosePresentation, imageText } from './ux'
 import { Context, h, Random, Session } from 'koishi'
 import {} from 'koishi-plugin-puppeteer'
 import { Config } from './config'
@@ -11,7 +10,7 @@ export const name = 'see-color'
 export const inject = ['database', 'puppeteer']
 export const usage = `## 使用
 
-\`color.开始\` 开局，发送 \`行 列\` 或块号猜测。猜对后色块边长增加，猜错不扣分。
+\`color.开始\` 开局，对局中直接发送 \`行 列\`（如 \`2 1\`）猜测；\`color.猜\` 另外接受块号。猜对后色块边长增加，猜错不扣分。对局进行中再发 \`color.开始\` 会重新贴出当前这一题。
 
 ## 指令
 
@@ -24,17 +23,15 @@ export const usage = `## 使用
 | \`color.排行榜 [数量]\` | 积分排行榜 |`
 
 const MESSAGES = {
-  hint: '发送「行 列」（如 `2 1`）或块号，指认与众不同的色块。',
+  hint: '发送「行 列」（如 `2 1`），指认与众不同的色块。',
   right: '✅ 猜中了。',
   wrong: '💡 不是这一块，再看看。',
-  running: '⚠️ 本频道已经有一局在进行\n发送「color.结束」收掉这一局，再开新的。',
   idle: '💡 还没有开始\n本频道当前没有进行中的对局。\n发送「color.开始」开一局。',
   busy: '⏳ 上一步还在处理，稍等一下。',
   renderFailed: '❌ 图片没能生成\n这一局先作罢，发送「color.开始」再试一次。',
 }
 
 export function apply(ctx: Context, config: Config) {
-  const presentation = usePresentation(ctx, 'color')
   const logger = ctx.logger(name)
   defineTables(ctx)
 
@@ -47,9 +44,9 @@ export function apply(ctx: Context, config: Config) {
   const lastMessage = new Map<string, { id: string; timestamp: number }>()
 
   async function send(session: Session, content: h.Fragment) {
-    const ids = await session.send(choosePresentation(content, presentation.textOnly(session)))
+    const ids = await session.send(content)
     const messageId = ids[0]
-    if (presentation.textOnly(session) || !config.retractDelay || !messageId) return ids
+    if (!config.retractDelay || !messageId) return ids
     const previous = lastMessage.get(session.channelId)
     if (previous) {
       const passed = Date.now() - previous.timestamp
@@ -71,9 +68,8 @@ export function apply(ctx: Context, config: Config) {
     return game?.isStarted ? game : undefined
   }
 
-  /** 出下一题：随机挑一块作为答案，落库后返回图片；出图失败时返回 null。 */
-  async function deal(session: Session, level: number) {
-    const block = Random.int(1, level * level + 1)
+  /** 出题：随机挑一块作为答案（重贴当前题时沿用原答案），落库后返回图片；出图失败时返回 null。 */
+  async function deal(session: Session, level: number, block = Random.int(1, level * level + 1)) {
     let image: h.Fragment
     try {
       image = h.image(await renderGrid(ctx, config, level, block - 1), mime)
@@ -86,7 +82,7 @@ export function apply(ctx: Context, config: Config) {
     const [existing] = await ctx.database.get('see_color_games', { channelId }, ['id'])
     if (existing) await ctx.database.set('see_color_games', { channelId }, state)
     else await ctx.database.create('see_color_games', { channelId, ...state })
-    return h('p', {}, [...h.normalize(image), imageText(`色差辨认题：${level} 行 ${level} 列，块号按从左到右、从上到下排列。发送「color.猜 行 列」或「color.猜 块号」。此题以辨认颜色为目的。`)])
+    return image
   }
 
   /** 把块号换算成人类可读的「第 R 行 第 C 列」。 */
@@ -94,8 +90,11 @@ export function apply(ctx: Context, config: Config) {
     return `${Math.floor((block - 1) / level) + 1} ${(block - 1) % level + 1}`
   }
 
-  /** 解析猜测，返回块号（从 1 开始）；无法解析时返回 0。 */
-  function parse(input: string, level: number) {
+  /**
+   * 解析猜测，返回块号（从 1 开始）；无法解析时返回 0。
+   * 裸发的消息只认「行 列」：单独一个数字太容易撞上日常聊天（比如「666」）。
+   */
+  function parse(input: string, level: number, allowBlock = true) {
     const text = input.trim().replace(/\s+/g, ' ')
     const pair = /^(\d+) (\d+)$/.exec(text)
     if (pair) {
@@ -103,7 +102,7 @@ export function apply(ctx: Context, config: Config) {
       if (row < 1 || row > level || col < 1 || col > level) return 0
       return (row - 1) * level + col
     }
-    if (!/^\d+$/.test(text)) return 0
+    if (!allowBlock || !/^\d+$/.test(text)) return 0
     const block = +text
     return block >= 1 && block <= level * level ? block : 0
   }
@@ -133,10 +132,10 @@ export function apply(ctx: Context, config: Config) {
   }
 
   /** 处理一次猜测；返回 false 表示这条消息不是一次有效猜测。 */
-  async function guess(session: Session, input: string) {
+  async function guess(session: Session, input: string, allowBlock: boolean) {
     const game = await getGame(session.channelId)
     if (!game) return false
-    const block = parse(input, game.level)
+    const block = parse(input, game.level, allowBlock)
     if (!block) return false
     if (busy.has(session.channelId)) {
       await send(session, MESSAGES.busy)
@@ -173,20 +172,21 @@ export function apply(ctx: Context, config: Config) {
     }
   }
 
-  // 游戏进行中时，直接发数字即可猜测，无需输入指令
+  // 游戏进行中时，直接发「行 列」即可猜测，无需输入指令
+  const PAIR = /^\d+\s+\d+$/
   registerDirectInput(ctx, 'see-color', async (session) => {
     if (!ctx.filter(session)) return false;
     if (!config.enableDirectInput) return false
-    if (!/^\d+(\s+\d+)?$/.test(session.content.trim())) return false
+    if (!PAIR.test(session.content.trim())) return false
     const game = await getGame(session.channelId)
-    return Boolean(game && parse(session.content, game.level))
+    return Boolean(game && parse(session.content, game.level, false))
   });
 
   ctx.middleware(async (session, next) => {
     if (!config.enableDirectInput) return next()
-    if (!/^\d+(\s+\d+)?$/.test(session.content.trim())) return next()
+    if (!PAIR.test(session.content.trim())) return next()
     if (await directInputConflict(ctx, session)) return;
-    if (!await guess(session, session.content)) return next()
+    if (!await guess(session, session.content, false)) return next()
     if (!config.shouldInterruptMiddlewareChainAfterTriggered) return next()
   })
 
@@ -196,10 +196,17 @@ export function apply(ctx: Context, config: Config) {
 
   cmd.subcommand('.开始', '开始一局')
     .action(async ({ session }) => {
-      if (await getGame(session.channelId)) return MESSAGES.running
       if (busy.has(session.channelId)) return send(session, MESSAGES.busy)
       busy.add(session.channelId)
       try {
+        const current = await getGame(session.channelId)
+        if (current) {
+          // 对局没有终点，题图常被聊天顶上去：重贴当前这一题，答案不变
+          const image = await deal(session, current.level, current.block)
+          if (!image) return MESSAGES.renderFailed
+          await send(session, [`⏳ 本频道这一局还在进行 · ${current.level}×${current.level}\n`, image, `\n${MESSAGES.hint}\n不想玩了就发送「color.结束」。`])
+          return
+        }
         await ctx.database.remove('see_color_playing_records', { channelId: session.channelId })
         const image = await deal(session, config.initialLevel)
         if (!image) return MESSAGES.renderFailed
@@ -216,7 +223,7 @@ export function apply(ctx: Context, config: Config) {
     .example('color.猜 2 1')
     .action(async ({ session }, input) => {
       if (!await getGame(session.channelId)) return MESSAGES.idle
-      if (!await guess(session, input ?? '')) return MESSAGES.hint
+      if (!await guess(session, input ?? '', true)) return '💡 发送「color.猜 行 列」（如 `color.猜 2 1`）或「color.猜 块号」。块号从左到右、从上到下数。'
     })
 
   cmd.subcommand('.结束', '结束本局并公布答案')
