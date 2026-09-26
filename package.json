@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-see-color",
   "description": "Koishi 找不同游戏：在方格中找出异色块并记录积分排行。",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "files": [
