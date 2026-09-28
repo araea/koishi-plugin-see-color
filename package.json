@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-see-color",
-  "description": "Koishi 插件 · 给我点颜色看看。",
+  "description": "Koishi 插件：在群里玩找异色块的拼眼力小游戏，支持积分排行。",
   "version": "2.3.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
