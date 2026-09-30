@@ -41,8 +41,7 @@ npm i koishi-plugin-see-color
 
 图片由无头浏览器渲染，固定输出 PNG 以避免有损压缩造成色差。Chromium 不可用或渲染失败时，本局中止，需重新 `color.开始`。
 
-## 链接
+## 必要链接
 
 - [设计系统](DESIGN_SYSTEM.md)
-- [更新日志](CHANGELOG.md)
 - [MIT](LICENSE-MIT) / [Apache-2.0](LICENSE-APACHE)
