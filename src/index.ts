@@ -4,6 +4,7 @@ import {} from 'koishi-plugin-puppeteer'
 import { Config } from './config'
 import { defineTables, SeeColorGame } from './model'
 import { renderGrid } from './render'
+import { helpOf } from './help'
 
 export { Config }
 export const name = 'see-color'
@@ -192,7 +193,11 @@ export function apply(ctx: Context, config: Config) {
 
   const cmd = ctx.command('color', '给我点颜色看看')
     .alias('seeColor')
-    .action(({ session }) => session.execute('help color'))
+    .userFields(['authority'])
+    .action(async ({ session }) => {
+      const { title, entries } = await helpOf(session, 'color', ['开始', '猜', '结束', '排行榜'].map((name) => `color.${name}`))
+      await send(session, [`📋 ${title}`, ...entries.map(({ name, description }) => `${name} · ${description}`), '发送「color.开始」开局，对局中直接发送「行 列」（如 2 1）猜测。'].join('\n'))
+    })
 
   cmd.subcommand('.开始', '开始一局')
     .action(async ({ session }) => {
